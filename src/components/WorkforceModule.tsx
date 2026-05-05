@@ -249,7 +249,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                       return (
                         <td key={i} className="p-0 min-w-[18px] sm:min-w-[22px] relative cursor-pointer group/cell">
                           {isWithinShift && !activity && (
-                            <div className={`absolute inset-y-2 inset-x-0 bg-slate-50 group-hover/cell:bg-blue-50/50 transition-colors ${isShiftStart ? "rounded-l-full ml-0.5" : ""} ${isShiftEnd ? "rounded-r-full mr-0.5" : ""}`} />
+                            <div className={`absolute inset-y-2 inset-x-0 bg-slate-200 group-hover/cell:bg-blue-100/50 transition-colors ${isShiftStart ? "rounded-l-full ml-0.5" : ""} ${isShiftEnd ? "rounded-r-full mr-0.5" : ""}`} />
                           )}
                           {activity && (
                             <div 
@@ -273,7 +273,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
         {/* Legend */}
         <div className="p-5 sm:p-8 bg-slate-50/80 backdrop-blur-sm flex flex-wrap items-center gap-6 sm:gap-10 justify-center border-t border-slate-100">
           <div className="flex items-center gap-3">
-            <div className="w-3 h-3 rounded-md bg-slate-50 border border-slate-300" />
+            <div className="w-3 h-3 rounded-md bg-slate-200 border border-slate-300" />
             <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Scheduled</span>
           </div>
           <div className="flex items-center gap-3">

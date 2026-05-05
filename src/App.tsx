@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import WorkforceModule from "./components/WorkforceModule.tsx";
 import HCManagementModule from "./components/HCManagementModule.tsx";
+import PLAnalysisModule from "./components/PLAnalysisModule.tsx";
 import AboutModule from "./components/AboutModule.tsx";
 import SettingsModule from "./components/Settings.tsx";
 import { 
@@ -44,7 +45,7 @@ const DASHBOARD_DATA: Category[] = [
     description: "Streamlined administration for user identity lifecycle management, access provisioning, and account deactivation.",
   },
   {
-    title: "PL Analysist",
+    title: "PL Analysis",
     icon: LineChart,
     description: "Comprehensive financial oversight featuring P&L forecasting, actual performance tracking, and billing submissions.",
   },
@@ -246,7 +247,7 @@ export default function App() {
             <motion.div 
                   key={idx}
                   variants={itemVariants}
-                  onClick={() => (category.title === "Workforce" || category.title === "HC Management") && setActiveModule(category.title)}
+                  onClick={() => (category.title === "Workforce" || category.title === "HC Management" || category.title === "PL Analysis") && setActiveModule(category.title)}
                   className="group bg-white rounded-2xl border border-gray-100 overflow-hidden hover:border-active-red/20 hover:shadow-[0_20px_50px_rgba(0,0,0,0.06)] transition-all duration-500 flex flex-col relative cursor-pointer"
                   id={`category-${idx}`}
                 >
@@ -289,6 +290,7 @@ export default function App() {
             >
               {activeModule === "Workforce" && <WorkforceModule onBack={() => setActiveModule(null)} />}
               {activeModule === "HC Management" && <HCManagementModule onBack={() => setActiveModule(null)} />}
+              {activeModule === "PL Analysis" && <PLAnalysisModule onBack={() => setActiveModule(null)} />}
             </motion.div>
           )}
         </AnimatePresence>
