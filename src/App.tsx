@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
+import LoginPage from "./components/LoginPage.tsx";
 import WorkforceModule from "./components/WorkforceModule.tsx";
 import HCManagementModule from "./components/HCManagementModule.tsx";
 import PLAnalysisModule from "./components/PLAnalysisModule.tsx";
@@ -87,6 +88,7 @@ const itemVariants = {
 };
 
 export default function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [activeModule, setActiveModule] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"dashboard" | "settings" | "about">("dashboard");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -97,6 +99,10 @@ export default function App() {
     month: 'long', 
     day: 'numeric' 
   });
+
+  if (!isLoggedIn) {
+    return <LoginPage onLogin={() => setIsLoggedIn(true)} />;
+  }
 
   const NavLinks = () => (
     <>
