@@ -10,6 +10,7 @@ const __dirname = path.dirname(__filename);
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, process.cwd(), '');
   return {
+    base: './',
     cacheDir: 'node_modules/vite-deps',
     plugins: [react(), tailwindcss()],
     define: {
