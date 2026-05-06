@@ -114,6 +114,8 @@ export default function App() {
   };
 
   const [activeTab, setActiveTab] = useState<"dashboard" | "settings" | "about">("dashboard");
+  const [settingsModule, setSettingsModule] = useState<string>("workforce");
+  const [settingsTab, setSettingsTab] = useState<string>("shift");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const currentDate = new Date().toLocaleDateString('en-US', { 
@@ -136,7 +138,13 @@ export default function App() {
         Dashboard
       </button>
       <button 
-        onClick={() => { setActiveTab("settings"); setActiveModule(null); setIsMobileMenuOpen(false); }}
+        onClick={() => { 
+          setSettingsModule("workforce");
+          setSettingsTab("shift");
+          setActiveTab("settings"); 
+          setActiveModule(null); 
+          setIsMobileMenuOpen(false); 
+        }}
         className={`text-xs font-bold uppercase tracking-widest pb-1 transition-all text-left lg:text-center ${activeTab === "settings" ? "text-black lg:border-b-2 lg:border-active-red" : "text-neutral-gray hover:text-black"}`}
       >
         Settings
@@ -268,7 +276,7 @@ export default function App() {
               exit={{ opacity: 0 }}
               className="w-full"
             >
-               <SettingsModule />
+               <SettingsModule initialModule={settingsModule} initialTab={settingsTab} />
             </motion.div>
           ) : !activeModule ? (
             <motion.div 
@@ -283,9 +291,26 @@ export default function App() {
             <motion.div 
                   key={idx}
                   variants={itemVariants}
-                  onClick={() => (category.title === "Workforce" || category.title === "HC Management" || category.title === "PL Analysis" || category.title === "KPI Tracker") && setActiveModule(category.title)}
+                  onClick={() => {
+                    const allowed = ["Workforce", "HC Management", "PL Analysis", "KPI Tracker", "Facility Tracker", "ID Creation & Deletion"];
+                    if (allowed.includes(category.title)) {
+                      if (category.title === "Facility Tracker") {
+                        setSettingsModule("facility");
+                        setSettingsTab("seat");
+                        setActiveTab("settings");
+                        setActiveModule(null);
+                      } else if (category.title === "ID Creation & Deletion") {
+                        setSettingsModule("security");
+                        setSettingsTab("none");
+                        setActiveTab("settings");
+                        setActiveModule(null);
+                      } else {
+                        setActiveModule(category.title);
+                      }
+                    }
+                  }}
                   className={`group bg-white rounded-2xl border border-gray-100 overflow-hidden hover:border-active-red/20 hover:shadow-[0_20px_50px_rgba(0,0,0,0.06)] transition-all duration-500 flex flex-col relative cursor-pointer ${
-                    !(category.title === "Workforce" || category.title === "HC Management" || category.title === "PL Analysis" || category.title === "KPI Tracker") ? 'opacity-60 grayscale' : ''
+                    !(["Workforce", "HC Management", "PL Analysis", "KPI Tracker", "Facility Tracker", "ID Creation & Deletion"].includes(category.title)) ? 'opacity-60 grayscale' : ''
                   }`}
                   id={`category-${idx}`}
                 >

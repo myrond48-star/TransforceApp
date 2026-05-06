@@ -21,13 +21,42 @@ import {
   Briefcase,
   Moon,
   Sun,
-  RefreshCw
+  RefreshCw,
+  Layout,
+  HardDrive,
+  FileCheck,
+  Wifi
 } from 'lucide-react';
 
-export const Settings: React.FC = () => {
+interface SettingsProps {
+  initialModule?: string;
+  initialTab?: string;
+}
+
+export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab }) => {
   const { settings, updateSettings, syncSettingsFromDB } = useAppStore();
-  const [activeModule, setActiveModule] = useState('workforce');
-  const [activeTab, setActiveTab] = useState('shift');
+  const [activeModule, setActiveModule] = useState(initialModule || 'workforce');
+  const [activeTab, setActiveTab] = useState(initialTab || 'shift');
+  
+  // Update state if props change (for deep linking from App)
+  useEffect(() => {
+    if (initialModule) setActiveModule(initialModule);
+    if (initialTab) setActiveTab(initialTab);
+  }, [initialModule, initialTab]);
+  
+  // Refined module switcher logic to handle tab resets correctly
+  const handleModuleSwitch = (moduleId: string) => {
+    setActiveModule(moduleId);
+    if (moduleId === 'workforce') {
+      setActiveTab('shift');
+    } else if (moduleId === 'facility') {
+      setActiveTab('seat');
+    } else {
+      // For modules without specific tabs, we reset to a safe default
+      // but it doesn't matter much as they don't check activeTab for rendering content
+      setActiveTab('none'); 
+    }
+  };
   const [isSyncing, setIsSyncing] = useState(false);
   const [isPushing, setIsPushing] = useState(false);
 
@@ -379,15 +408,12 @@ export const Settings: React.FC = () => {
     <div className="h-full bg-slate-50 overflow-y-auto p-4 lg:p-10">
       <div className="max-w-7xl mx-auto">
         {/* Module Switcher Header */}
-        <div className="flex flex-wrap gap-2 mb-10 bg-white p-2 rounded-2xl border border-gray-100 shadow-sm w-fit">
+        <div className="flex flex-wrap gap-2 mb-10 bg-white p-2 rounded-2xl border border-gray-100 shadow-sm w-fit sticky top-0 md:relative z-30">
           {modules.map((m) => (
             <button
               key={m.id}
-              onClick={() => {
-                setActiveModule(m.id);
-                if (m.id === 'workforce') setActiveTab('shift');
-              }}
-              className={`flex items-center gap-2.5 px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeModule === m.id ? 'bg-slate-950 text-white shadow-xl shadow-slate-200' : 'text-slate-400 hover:text-slate-950 hover:bg-slate-50'}`}
+              onClick={() => handleModuleSwitch(m.id)}
+              className={`flex items-center gap-2.5 px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeModule === m.id ? 'bg-slate-950 text-white shadow-xl shadow-slate-200 scale-105' : 'text-slate-400 hover:text-slate-950 hover:bg-slate-50'}`}
             >
               <m.icon size={16} />
               {m.label}
@@ -442,7 +468,7 @@ export const Settings: React.FC = () => {
         <div className="bg-white rounded-[2rem] border border-slate-200 shadow-xl shadow-slate-200/50 relative overflow-hidden">
           {activeModule === 'workforce' && (
             <>
-              <div className="flex border-b border-slate-100 bg-slate-50/50 p-2 gap-1 overflow-x-auto scrollbar-none items-center sticky top-0 z-10 no-scrollbar">
+              <div className="flex border-b border-slate-100 bg-slate-50/50 p-2 gap-1 overflow-x-auto items-center sticky top-0 z-20 no-scrollbar">
                 {[
                   { id: 'shift', icon: Clock, label: 'Shifts' },
                   { id: 'roles', icon: Users, label: 'Access Roles' },
@@ -881,13 +907,89 @@ export const Settings: React.FC = () => {
         )}
 
         {activeModule === 'facility' && (
-           <div className="animate-in fade-in slide-in-from-top-4 duration-300 p-6 md:p-10 text-center py-20">
-              <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6">
-                 <Globe className="text-slate-200" size={32} />
-              </div>
-              <h4 className="text-slate-950 text-base font-black uppercase tracking-widest">Facility Registry Offline</h4>
-              <p className="text-slate-400 text-[10px] font-bold uppercase tracking-tight mt-2 italic">Asset & Spatial Management Module In Development</p>
-           </div>
+          <div className="animate-in fade-in slide-in-from-top-4 duration-300">
+            <div className="flex border-b border-slate-100 bg-slate-50/50 p-2 gap-1 overflow-x-auto items-center sticky top-0 z-20 no-scrollbar">
+              {[
+                { id: 'seat', icon: Layout, label: 'Seat Management' },
+                { id: 'asset', icon: HardDrive, label: 'Asset Management' },
+                { id: 'license', icon: FileCheck, label: 'License Management' },
+                { id: 'network', icon: Wifi, label: 'Network Occupancy' },
+              ].map(tab => (
+                <button 
+                  key={tab.id}
+                  className={`min-w-fit px-5 py-3 font-black text-[10px] uppercase tracking-widest rounded-xl transition-all whitespace-nowrap flex items-center gap-2.5 ${activeTab === tab.id ? 'bg-slate-950 text-white shadow-md' : 'text-slate-400 hover:text-slate-900 hover:bg-slate-100'}`} 
+                  onClick={() => setActiveTab(tab.id)}
+                >
+                  <tab.icon size={14} />
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="p-6 md:p-10">
+              {activeTab === 'seat' && (
+                <div className="animate-in fade-in slide-in-from-top-4 duration-300 max-w-5xl mx-auto">
+                  <div className="bg-slate-50 p-6 md:p-10 rounded-[2.5rem] border border-slate-200 shadow-sm text-center py-20">
+                    <div className="w-16 h-16 bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center justify-center mx-auto mb-6">
+                      <Layout className="text-rose-600" size={28} />
+                    </div>
+                    <h4 className="text-slate-900 text-base font-black uppercase tracking-widest mb-2">Seat Management Kernel</h4>
+                    <p className="text-slate-500 text-[10px] font-bold uppercase tracking-tight max-w-xs mx-auto">Dynamic spatial allocation and workstation availability tracking.</p>
+                    <div className="mt-10 grid grid-cols-1 md:grid-cols-3 gap-6 text-left">
+                      <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-2">Total Capacity</label>
+                        <div className="text-2xl font-black text-slate-950">1,240</div>
+                      </div>
+                      <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-2">Active Floor</label>
+                        <div className="text-2xl font-black text-slate-950">Level 04</div>
+                      </div>
+                      <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-2">Occupancy</label>
+                        <div className="text-2xl font-black text-rose-600">82%</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'asset' && (
+                <div className="animate-in fade-in slide-in-from-top-4 duration-300 max-w-5xl mx-auto">
+                  <div className="bg-slate-50 p-6 md:p-10 rounded-[2.5rem] border border-slate-200 shadow-sm text-center py-20">
+                    <div className="w-16 h-16 bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center justify-center mx-auto mb-6">
+                      <HardDrive className="text-rose-600" size={28} />
+                    </div>
+                    <h4 className="text-slate-900 text-base font-black uppercase tracking-widest mb-2">Asset Lifecycle Registry</h4>
+                    <p className="text-slate-500 text-[10px] font-bold uppercase tracking-tight max-w-xs mx-auto">Hardware inventory tracking and maintenance scheduling.</p>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'license' && (
+                <div className="animate-in fade-in slide-in-from-top-4 duration-300 max-w-5xl mx-auto">
+                  <div className="bg-slate-50 p-6 md:p-10 rounded-[2.5rem] border border-slate-200 shadow-sm text-center py-20">
+                    <div className="w-16 h-16 bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center justify-center mx-auto mb-6">
+                      <FileCheck className="text-rose-600" size={28} />
+                    </div>
+                    <h4 className="text-slate-900 text-base font-black uppercase tracking-widest mb-2">Software Compliance Gate</h4>
+                    <p className="text-slate-500 text-[10px] font-bold uppercase tracking-tight max-w-xs mx-auto">Centralized license pool management and utilization metrics.</p>
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'network' && (
+                <div className="animate-in fade-in slide-in-from-top-4 duration-300 max-w-5xl mx-auto">
+                  <div className="bg-slate-50 p-6 md:p-10 rounded-[2.5rem] border border-slate-200 shadow-sm text-center py-20">
+                    <div className="w-16 h-16 bg-white rounded-2xl shadow-sm border border-slate-100 flex items-center justify-center mx-auto mb-6">
+                      <Wifi className="text-rose-600" size={28} />
+                    </div>
+                    <h4 className="text-slate-900 text-base font-black uppercase tracking-widest mb-2">Network Occupancy Kernel</h4>
+                    <p className="text-slate-500 text-[10px] font-bold uppercase tracking-tight max-w-xs mx-auto">Real-time bandwidth utilization and endpoint connectivity status.</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         )}
           </div>
         </div>
