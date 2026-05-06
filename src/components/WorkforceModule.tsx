@@ -72,11 +72,11 @@ const generateIntervals = () => {
 const intervals = generateIntervals();
 
 const mockAgents = [
-  { id: "WF001", name: "Alexander Grant", shift: "S1", team: "Support A", activities: { 20: "LB", 21: "LB", 22: "LB", 23: "LB", 40: "SB" } },
-  { id: "WF002", name: "Sarah Connor", shift: "H", team: "Support B", activities: { 24: "MT", 25: "MT", 48: "LB", 49: "LB", 50: "LB", 51: "LB" } },
-  { id: "WF003", name: "John Wick", shift: "S2", team: "High Priority", activities: { 70: "LB", 71: "LB", 72: "LB", 73: "LB" } },
-  { id: "WF004", name: "Ellen Ripley", shift: "S1", team: "Support A", activities: { 32: "TR", 33: "TR", 34: "TR", 35: "TR" } },
-  { id: "WF005", name: "Arthur Dent", shift: "H", team: "Support B", activities: { 44: "LB", 45: "LB", 46: "LB", 47: "LB" } },
+  { id: "WF001", name: "Alexander Grant", shift: "S1", team: "Support A", activities: { 40: "LB", 41: "LB", 42: "LB", 43: "LB", 56: "SB" } },
+  { id: "WF002", name: "Sarah Connor", shift: "H", team: "Support B", activities: { 48: "MT", 49: "MT", 56: "LB", 57: "LB", 58: "LB", 59: "LB" } },
+  { id: "WF003", name: "John Wick", shift: "S2", team: "High Priority", activities: { 80: "LB", 81: "LB", 82: "LB", 83: "LB" } },
+  { id: "WF004", name: "Ellen Ripley", shift: "S1", team: "Support A", activities: { 48: "TR", 49: "TR", 50: "TR", 51: "TR" } },
+  { id: "WF005", name: "Arthur Dent", shift: "H", team: "Support B", activities: { 60: "LB", 61: "LB", 62: "LB", 63: "LB" } },
   ...Array.from({ length: 35 }).map((_, i) => {
     const shiftOpts = ["S1", "S2", "H"];
     const teamOpts = ["Support A", "Support B", "High Priority", "Technical"];
@@ -86,17 +86,17 @@ const mockAgents = [
     const firsts = ["James", "Maria", "Michael", "Linda", "Robert", "David", "Jessica", "Daniel", "Emily", "Jane", "Alice", "Bob", "Charlie", "Dave", "Eve", "Frank"];
     const lasts = ["Smith", "Johnson", "Williams", "Jones", "Brown", "Davis", "Miller", "Wilson", "Moore", "Taylor", "Anderson", "Thomas", "Jackson", "White", "Harris", "Martin"];
     const name = firsts[Math.floor(Math.random() * firsts.length)] + " " + lasts[Math.floor(Math.random() * lasts.length)];
-    let breakStart = shift === "S1" ? 20 + Math.floor(Math.random() * 8) : shift === "H" ? 40 + Math.floor(Math.random() * 8) : 68 + Math.floor(Math.random() * 8);
+    let breakStart = shift === "S1" ? 40 + Math.floor(Math.random() * 16) : shift === "H" ? 56 + Math.floor(Math.random() * 16) : 80 + Math.floor(Math.random() * 12);
     return {
       id,
       name,
       shift,
       team,
       activities: {
-        [breakStart]: "LB",
-        [breakStart + 1]: "LB",
-        [breakStart + 2]: "LB",
-        [breakStart + 3]: "LB",
+        [(breakStart) % 96]: "LB",
+        [(breakStart + 1) % 96]: "LB",
+        [(breakStart + 2) % 96]: "LB",
+        [(breakStart + 3) % 96]: "LB",
       }
     };
   })
@@ -266,34 +266,34 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
           </div>
 
           {/* The Grid Table */}
-          <div className="overflow-x-auto relative">
+          <div className="overflow-auto relative max-h-[600px]">
             <table className="border-separate border-spacing-0 table-fixed w-full min-w-[2800px]">
-              <thead>
+              <thead className="sticky top-0 z-50">
                 {/* Agent Actual Row */}
                 <tr className="bg-white">
-                  <th className="sticky left-0 z-40 bg-white h-12 w-[180px] sm:w-[220px] px-4 sm:px-6 border-r border-gray-200 border-b border-gray-50">
+                  <th className="sticky left-0 z-[60] bg-white h-12 w-[180px] sm:w-[220px] px-4 sm:px-6 border-r border-gray-200 border-b border-gray-50 top-0">
                     <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest block text-left">Agent Actual</span>
                   </th>
                   {intervals.map((_, i) => (
-                    <th key={i} className="text-[8px] sm:text-[9px] font-black text-slate-700 border-b border-gray-50 h-12 align-middle min-w-[28px] px-0.5 text-center">
+                    <th key={i} className="text-[8px] sm:text-[9px] font-black text-slate-700 border-b border-gray-50 h-12 align-middle min-w-[28px] px-0.5 text-center bg-white">
                       {Math.round(reqData[i].actual)}
                     </th>
                   ))}
                 </tr>
                 {/* Agent FTE Row */}
                 <tr className="bg-white">
-                  <th className="sticky left-0 z-40 bg-white h-12 w-[180px] sm:w-[220px] px-4 sm:px-6 border-r border-gray-200 border-b border-gray-50">
+                  <th className="sticky left-0 z-[60] bg-white h-12 w-[180px] sm:w-[220px] px-4 sm:px-6 border-r border-gray-200 border-b border-gray-50 top-12">
                     <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest block text-left">Agent FTE</span>
                   </th>
                   {intervals.map((_, i) => (
-                    <th key={i} className="text-[8px] sm:text-[9px] font-black text-slate-700 border-b border-gray-50 h-12 align-middle min-w-[28px] px-0.5 text-center">
+                    <th key={i} className="text-[8px] sm:text-[9px] font-black text-slate-700 border-b border-gray-50 h-12 align-middle min-w-[28px] px-0.5 text-center bg-white">
                       {Math.round(reqData[i].actual * 0.85)}
                     </th>
                   ))}
                 </tr>
                 {/* Coverage Gap Row */}
-                <tr className="bg-slate-50/50">
-                  <th className="sticky left-0 z-40 bg-slate-50 h-12 w-[180px] sm:w-[220px] px-4 sm:px-6 border-r border-gray-200 border-b border-slate-100">
+                <tr className="bg-slate-50">
+                  <th className="sticky left-0 z-[60] bg-slate-50 h-12 w-[180px] sm:w-[220px] px-4 sm:px-6 border-r border-gray-200 border-b border-slate-100 top-24">
                     <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest block text-left">Coverage Gap</span>
                   </th>
                   {intervals.map((_, i) => {
@@ -303,7 +303,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                     const isMinus = gapValue < 0; 
                     
                     return (
-                      <th key={i} className={`text-[8px] sm:text-[9px] font-black h-12 align-middle border-b border-slate-100 min-w-[28px] px-0.5 text-center ${isMinus ? 'text-rose-600' : 'text-emerald-600'}`}>
+                      <th key={i} className={`text-[8px] sm:text-[9px] font-black h-12 align-middle border-b border-slate-100 min-w-[28px] px-0.5 text-center bg-slate-50 ${isMinus ? 'text-rose-600' : 'text-emerald-600'}`}>
                         {gapValue > 0 ? `+${gapValue}` : gapValue}
                       </th>
                     );
@@ -311,12 +311,12 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                 </tr>
                 {/* Time Indicators */}
                 <tr className="bg-white">
-                  <th className="sticky left-0 z-40 bg-white w-[180px] sm:w-[220px] px-4 sm:px-6 py-3 border-r border-gray-200 border-b border-gray-100 font-black text-[10px] text-black text-left uppercase tracking-widest">
+                  <th className="sticky left-0 z-[60] bg-white w-[180px] sm:w-[220px] px-4 sm:px-6 py-3 border-r border-gray-200 border-b border-gray-100 font-black text-[10px] text-black text-left uppercase tracking-widest top-36">
                     Agent Name
                   </th>
                 {intervals.map((time, i) => (
                   i % 4 === 0 ? (
-                    <th key={i} colSpan={4} className="border-b border-gray-100 border-r border-gray-50/50 text-[8px] sm:text-[9px] font-bold text-neutral-gray py-1.5 text-center">
+                    <th key={i} colSpan={4} className="border-b border-gray-100 border-r border-gray-50/50 text-[8px] sm:text-[9px] font-bold text-neutral-gray py-1.5 text-center bg-white">
                       {time}
                     </th>
                   ) : null
