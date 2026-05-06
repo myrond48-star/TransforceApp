@@ -6,6 +6,7 @@ import HCManagementModule from "./components/HCManagementModule.tsx";
 import PLAnalysisModule from "./components/PLAnalysisModule.tsx";
 import AboutModule from "./components/AboutModule.tsx";
 import KPITrackerModule from "./components/KPITrackerModule.tsx";
+import FacilityTrackerModule from "./components/FacilityTrackerModule.tsx";
 import { Settings as SettingsModule } from "./components/Settings.tsx";
 import { 
   Users, 
@@ -294,12 +295,7 @@ export default function App() {
                   onClick={() => {
                     const allowed = ["Workforce", "HC Management", "PL Analysis", "KPI Tracker", "Facility Tracker", "ID Creation & Deletion"];
                     if (allowed.includes(category.title)) {
-                      if (category.title === "Facility Tracker") {
-                        setSettingsModule("facility");
-                        setSettingsTab("seat");
-                        setActiveTab("settings");
-                        setActiveModule(null);
-                      } else if (category.title === "ID Creation & Deletion") {
+                      if (category.title === "ID Creation & Deletion") {
                         setSettingsModule("security");
                         setSettingsTab("none");
                         setActiveTab("settings");
@@ -355,6 +351,7 @@ export default function App() {
               {activeModule === "HC Management" && <HCManagementModule onBack={() => setActiveModule(null)} />}
               {activeModule === "PL Analysis" && <PLAnalysisModule onBack={() => setActiveModule(null)} />}
               {activeModule === "KPI Tracker" && <KPITrackerModule onBack={() => setActiveModule(null)} />}
+              {activeModule === "Facility Tracker" && <FacilityTrackerModule onBack={() => setActiveModule(null)} />}
             </motion.div>
           )}
         </AnimatePresence>

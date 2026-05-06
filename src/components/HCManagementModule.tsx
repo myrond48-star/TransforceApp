@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
 import { 
   ArrowLeft, 
   Users, 
@@ -12,7 +12,15 @@ import {
   MoreHorizontal,
   Briefcase,
   Calendar,
-  AlertCircle
+  AlertCircle,
+  Plus,
+  Edit2,
+  Trash2,
+  Save,
+  X,
+  CheckCircle2,
+  Sun,
+  Moon
 } from "lucide-react";
 import { 
   BarChart, 
@@ -52,8 +60,173 @@ const employeeList = [
 export default function HCManagementModule({ onBack }: HCManagementModuleProps) {
   const [activeView, setActiveView] = useState("overview");
 
+  const [filterMode, setFilterMode] = useState<"month" | "range" | "single">("month");
+  const [selectedSite, setSelectedSite] = useState("");
+  const [selectedUnit, setSelectedUnit] = useState("");
+  const [selectedProject, setSelectedProject] = useState("");
+  const [selectedLanguage, setSelectedLanguage] = useState("");
+
+  // CRUD State
+  const [employees, setEmployees] = useState(employeeList);
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingEmployee, setEditingEmployee] = useState<any | null>(null);
+  const [formData, setFormData] = useState({
+    id: "",
+    name: "",
+    role: "",
+    status: "Active",
+    joinDate: new Date().toISOString().split('T')[0],
+    email: ""
+  });
+
+  const handleEdit = (emp: any) => {
+    setEditingEmployee(emp);
+    setFormData(emp);
+    setIsFormOpen(true);
+  };
+
+  const handleDelete = (id: string) => {
+    if (confirm("Are you sure you want to delete this employee?")) {
+      setEmployees(employees.filter(e => e.id !== id));
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editingEmployee) {
+      setEmployees(employees.map(e => e.id === editingEmployee.id ? formData : e));
+    } else {
+      const newId = `EMP${String(employees.length + 1).padStart(3, '0')}`;
+      setEmployees([...employees, { ...formData, id: newId }]);
+    }
+    setIsFormOpen(false);
+    setEditingEmployee(null);
+    setFormData({ id: "", name: "", role: "", status: "Active", joinDate: new Date().toISOString().split('T')[0], email: "" });
+  };
+
   const renderOverview = () => (
     <div className="space-y-6 sm:space-y-8">
+      {/* Filters Section */}
+      <div className="bg-white p-5 sm:p-6 rounded-2xl border border-gray-100 shadow-sm space-y-6">
+        <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-6">
+          {/* Date Selection */}
+          <div className="space-y-3 flex-1">
+            <div className="flex items-center justify-between xl:justify-start gap-4">
+              <p className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest">Time Dimension</p>
+              <div className="flex bg-gray-100 p-0.5 rounded-lg">
+                {(["month", "range", "single"] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={() => setFilterMode(mode)}
+                    className={`px-3 py-1 rounded-md text-[9px] font-bold uppercase transition-all ${
+                      filterMode === mode ? "bg-white text-black shadow-sm" : "text-neutral-gray hover:text-black"
+                    }`}
+                  >
+                    {mode}
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {filterMode === "month" && (
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-gray pointer-events-none" />
+                  <input 
+                    type="month" 
+                    className="w-full bg-gray-50 border border-gray-100 rounded-xl pl-10 pr-4 py-2.5 text-[11px] font-bold uppercase focus:ring-1 focus:ring-black outline-none transition-all"
+                  />
+                </div>
+              )}
+              {filterMode === "range" && (
+                <>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-gray pointer-events-none" />
+                    <input 
+                      type="date" 
+                      placeholder="START DATE"
+                      className="w-full bg-gray-50 border border-gray-100 rounded-xl pl-10 pr-4 py-2.5 text-[11px] font-bold uppercase focus:ring-1 focus:ring-black outline-none transition-all"
+                    />
+                  </div>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-gray pointer-events-none" />
+                    <input 
+                      type="date" 
+                      placeholder="END DATE"
+                      className="w-full bg-gray-50 border border-gray-100 rounded-xl pl-10 pr-4 py-2.5 text-[11px] font-bold uppercase focus:ring-1 focus:ring-black outline-none transition-all"
+                    />
+                  </div>
+                </>
+              )}
+              {filterMode === "single" && (
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-gray pointer-events-none" />
+                  <input 
+                    type="date" 
+                    className="w-full bg-gray-50 border border-gray-100 rounded-xl pl-10 pr-4 py-2.5 text-[11px] font-bold uppercase focus:ring-1 focus:ring-black outline-none transition-all"
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Dimension Filters */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 xl:w-2/3">
+            <div className="space-y-1.5">
+              <label className="text-[9px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Site</label>
+              <select 
+                value={selectedSite}
+                onChange={(e) => setSelectedSite(e.target.value)}
+                className="w-full bg-gray-50 border border-gray-100 rounded-xl px-3 py-2.5 text-[10px] font-bold uppercase focus:ring-1 focus:ring-black outline-none appearance-none transition-all"
+              >
+                <option value="">All Sites</option>
+                <option value="jakarta">Jakarta</option>
+                <option value="surabaya">Surabaya</option>
+                <option value="bandung">Bandung</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[9px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Unit</label>
+              <select 
+                value={selectedUnit}
+                onChange={(e) => setSelectedUnit(e.target.value)}
+                className="w-full bg-gray-50 border border-gray-100 rounded-xl px-3 py-2.5 text-[10px] font-bold uppercase focus:ring-1 focus:ring-black outline-none appearance-none transition-all"
+              >
+                <option value="">All Units</option>
+                <option value="operation">Operation</option>
+                <option value="support">Support</option>
+                <option value="tech">Technology</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[9px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Project</label>
+              <select 
+                value={selectedProject}
+                onChange={(e) => setSelectedProject(e.target.value)}
+                className="w-full bg-gray-50 border border-gray-100 rounded-xl px-3 py-2.5 text-[10px] font-bold uppercase focus:ring-1 focus:ring-black outline-none appearance-none transition-all"
+              >
+                <option value="">All Projects</option>
+                <option value="p1">Project Alpha</option>
+                <option value="p2">Project Beta</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[9px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Language</label>
+              <select 
+                value={selectedLanguage}
+                onChange={(e) => setSelectedLanguage(e.target.value)}
+                className="w-full bg-gray-50 border border-gray-100 rounded-xl px-3 py-2.5 text-[10px] font-bold uppercase focus:ring-1 focus:ring-black outline-none appearance-none transition-all"
+              >
+                <option value="">All Lang</option>
+                <option value="en">English</option>
+                <option value="id">Indonesian</option>
+                <option value="jp">Japanese</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Top Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
         <div className="bg-white p-5 sm:p-6 rounded-2xl border border-gray-100 shadow-sm relative overflow-hidden group">
@@ -171,7 +344,7 @@ export default function HCManagementModule({ onBack }: HCManagementModuleProps) 
 
       {/* Mobile Card View */}
       <div className="block lg:hidden divide-y divide-gray-50">
-        {employeeList.map((emp) => (
+        {employees.map((emp) => (
           <div key={emp.id} className="p-4 flex flex-col gap-4">
              <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -199,7 +372,8 @@ export default function HCManagementModule({ onBack }: HCManagementModuleProps) 
                    <p className="text-[8px] font-bold text-neutral-gray uppercase tracking-widest">Status/Join Date</p>
                    <div className="flex flex-col gap-1 mt-0.5">
                      <span className={`w-fit px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-widest ${
-                        emp.status === 'Active' ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-neutral-gray'
+                        emp.status === 'Active' ? 'bg-green-50 text-green-600' : 
+                        emp.status === 'On Leave' ? 'bg-amber-50 text-amber-600' : 'bg-gray-100 text-neutral-gray'
                       }`}>
                         {emp.status}
                       </span>
@@ -224,7 +398,7 @@ export default function HCManagementModule({ onBack }: HCManagementModuleProps) 
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50 text-xs">
-            {employeeList.map((emp) => (
+            {employees.map((emp) => (
               <tr key={emp.id} className="hover:bg-gray-50/50 transition-colors group">
                 <td className="px-6 py-5">
                   <div className="flex items-center gap-3">
@@ -246,7 +420,8 @@ export default function HCManagementModule({ onBack }: HCManagementModuleProps) 
                 <td className="px-6 py-5">
                   <div className="flex justify-center">
                     <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest ${
-                      emp.status === 'Active' ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-neutral-gray'
+                      emp.status === 'Active' ? 'bg-green-50 text-green-600' : 
+                      emp.status === 'On Leave' ? 'bg-amber-50 text-amber-600' : 'bg-gray-100 text-neutral-gray'
                     }`}>
                       {emp.status}
                     </span>
@@ -268,13 +443,184 @@ export default function HCManagementModule({ onBack }: HCManagementModuleProps) 
       </div>
 
       <div className="p-4 sm:p-5 bg-gray-50 border-t border-gray-100 flex flex-col xs:flex-row items-center justify-between gap-4">
-        <p className="text-[9px] font-bold text-neutral-gray uppercase tracking-widest">Showing 5 of 428 records</p>
+        <p className="text-[9px] font-bold text-neutral-gray uppercase tracking-widest">Showing {employees.length} of 428 records</p>
         <div className="flex gap-1.5">
           <button className="w-8 h-8 flex items-center justify-center rounded-lg border border-gray-200 text-[11px] font-bold hover:bg-white transition-colors">1</button>
           <button className="w-8 h-8 flex items-center justify-center rounded-lg text-[11px] font-bold text-neutral-gray hover:bg-white hover:border-gray-200 transition-colors">2</button>
           <button className="w-8 h-8 flex items-center justify-center rounded-lg text-[11px] font-bold text-neutral-gray hover:bg-white hover:border-gray-200 transition-colors">3</button>
         </div>
       </div>
+    </div>
+  );
+
+  const renderUserManagement = () => (
+    <div className="space-y-6">
+      <AnimatePresence mode="wait">
+        {isFormOpen ? (
+          <motion.div 
+            key="form"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="bg-white p-6 sm:p-8 rounded-2xl border border-gray-100 shadow-xl max-w-2xl mx-auto"
+          >
+            <div className="flex items-center justify-between mb-8">
+              <h3 className="text-sm font-black text-black uppercase tracking-widest">
+                {editingEmployee ? 'Update Identity' : 'Create New Identity'}
+              </h3>
+              <button onClick={() => setIsFormOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
+                <X className="w-5 h-5 text-neutral-gray" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Full Name</label>
+                  <input 
+                    required
+                    value={formData.name}
+                    onChange={e => setFormData({ ...formData, name: e.target.value })}
+                    className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[11px] font-bold focus:ring-1 focus:ring-black outline-none transition-all"
+                    placeholder="e.g. John Doe"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Corporate Email</label>
+                  <input 
+                    required
+                    type="email"
+                    value={formData.email}
+                    onChange={e => setFormData({ ...formData, email: e.target.value })}
+                    className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[11px] font-bold focus:ring-1 focus:ring-black outline-none transition-all"
+                    placeholder="name@transforce.com"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Assigned Role</label>
+                  <select 
+                    value={formData.role}
+                    onChange={e => setFormData({ ...formData, role: e.target.value })}
+                    className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[11px] font-bold uppercase focus:ring-1 focus:ring-black outline-none transition-all"
+                  >
+                    <option value="">Select Role</option>
+                    <option value="Ops Lead">Ops Lead</option>
+                    <option value="Sr. Analyst">Sr. Analyst</option>
+                    <option value="Support Spec">Support Spec</option>
+                    <option value="QC Engineer">QC Engineer</option>
+                    <option value="Wfm Manager">Wfm Manager</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Current Status</label>
+                  <select 
+                    value={formData.status}
+                    onChange={e => setFormData({ ...formData, status: e.target.value })}
+                    className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[11px] font-bold uppercase focus:ring-1 focus:ring-black outline-none transition-all"
+                  >
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                    <option value="On Leave">On Leave</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Enrollment Date</label>
+                  <input 
+                    type="date"
+                    value={formData.joinDate}
+                    onChange={e => setFormData({ ...formData, joinDate: e.target.value })}
+                    className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[11px] font-bold uppercase focus:ring-1 focus:ring-black outline-none transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-6 border-t border-gray-50 flex gap-3">
+                <button 
+                  type="submit"
+                  className="flex-1 bg-black text-white hover:bg-active-red py-4 rounded-xl text-[11px] font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2"
+                >
+                  <Save className="w-4 h-4" /> {editingEmployee ? 'Commit Changes' : 'Initialize Identity'}
+                </button>
+              </div>
+            </form>
+          </motion.div>
+        ) : (
+          <motion.div 
+            key="list"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden"
+          >
+            <div className="p-6 border-b border-gray-50 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h3 className="text-sm font-black text-black uppercase tracking-tight">Identity Management</h3>
+                <p className="text-[10px] text-neutral-gray font-bold uppercase tracking-widest mt-1 italic">Administrative Control Panel</p>
+              </div>
+              <button 
+                onClick={() => { setEditingEmployee(null); setIsFormOpen(true); }}
+                className="bg-black text-white px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-active-red transition-all shadow-lg shadow-black/10"
+              >
+                <Plus className="w-4 h-4" /> Create New User
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead className="bg-gray-50/50">
+                  <tr>
+                    <th className="px-6 py-4 text-[9px] font-bold text-neutral-gray uppercase tracking-widest">User ID & Name</th>
+                    <th className="px-6 py-4 text-[9px] font-bold text-neutral-gray uppercase tracking-widest">Role</th>
+                    <th className="px-6 py-4 text-[9px] font-bold text-neutral-gray uppercase tracking-widest">Status</th>
+                    <th className="px-6 py-4 text-[9px] font-bold text-neutral-gray uppercase tracking-widest text-right">Operations</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {employees.map((emp) => (
+                    <tr key={emp.id} className="hover:bg-gray-50/30 transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center font-bold text-[10px] text-neutral-gray">
+                            {emp.name.split(' ').map((n: string) => n[0]).join('')}
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold text-black">{emp.name}</p>
+                            <p className="text-[9px] text-neutral-gray font-medium uppercase tracking-tighter">{emp.id}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="text-[10px] font-bold text-neutral-gray uppercase bg-gray-100 px-2 py-0.5 rounded">{emp.role}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-1.5">
+                          <div className={`w-1.5 h-1.5 rounded-full ${emp.status === 'Active' ? 'bg-green-500' : emp.status === 'On Leave' ? 'bg-amber-500' : 'bg-gray-300'}`} />
+                          <span className="text-[10px] font-bold text-black uppercase">{emp.status}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button 
+                            onClick={() => handleEdit(emp)}
+                            className="p-2 text-neutral-gray hover:text-black hover:bg-gray-100 rounded-lg transition-all"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button 
+                            onClick={() => handleDelete(emp.id)}
+                            className="p-2 text-neutral-gray hover:text-active-red hover:bg-red-50 rounded-lg transition-all"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 
@@ -303,6 +649,7 @@ export default function HCManagementModule({ onBack }: HCManagementModuleProps) 
             {[
               { id: 'overview', label: 'Summary', icon: TrendingUp },
               { id: 'employees', label: 'Employees', icon: Users },
+              { id: 'user-management', label: 'Identity CRUD', icon: CheckCircle2 },
               { id: 'attrition', label: 'Analytics', icon: UserMinus },
             ].map(tab => (
               <button
@@ -330,6 +677,7 @@ export default function HCManagementModule({ onBack }: HCManagementModuleProps) 
       >
         {activeView === 'overview' && renderOverview()}
         {activeView === 'employees' && renderEmployees()}
+        {activeView === 'user-management' && renderUserManagement()}
         {activeView === 'attrition' && (
           <div className="py-20 sm:py-32 bg-white rounded-2xl sm:rounded-[32px] border border-gray-100 shadow-sm text-center px-6">
             <div className="w-16 h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-6">
