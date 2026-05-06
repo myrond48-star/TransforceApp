@@ -18,7 +18,7 @@ jobs:
       - name: Push kode ke Repositori A
         env:
           # HAPUS https:// agar tidak dobel. Tambahkan .git di belakangnya
-          TARGET_REPO: "github.com/taqienahmad/TransforceApp.git" 
+          TARGET_REPO: "https://github.com/taqienahmad/TransForce-Management-Dashboard" 
           TARGET_BRANCH: "main"
         run: |
           # Menambahkan Repositori A sebagai tujuan dengan menggunakan Token Rahasia
