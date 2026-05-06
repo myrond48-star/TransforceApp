@@ -15,6 +15,6 @@
 
 @layer base {
   body {
-    @apply font-sans bg-[#FAFAFA] text-black antialiased;
+    @apply font-sans bg-slate-50 text-black antialiased;
   }
 }

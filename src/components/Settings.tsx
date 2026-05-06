@@ -119,13 +119,31 @@ export const Settings: React.FC = () => {
   };
 
   const handleSaveDbUrl = async () => {
-    if (!dbUrlInput) {
-      alert("Please enter a database connection string");
-      return;
+    let urlToUse = dbUrlInput;
+
+    if (!urlToUse) {
+      if (sqlConfig.host && sqlConfig.username && sqlConfig.password && sqlConfig.database) {
+        // Construct the URL from individual fields
+        const host = sqlConfig.host;
+        const port = sqlConfig.port || '5432';
+        const user = encodeURIComponent(sqlConfig.username);
+        const pass = encodeURIComponent(sqlConfig.password);
+        const dbName = sqlConfig.database;
+        urlToUse = `postgresql://${user}:${pass}@${host}:${port}/${dbName}`;
+        
+        // Add SSL param if enabled
+        if (sqlConfig.ssl) {
+          urlToUse += "?sslmode=no-verify";
+        }
+      } else {
+        alert("Please enter either a connection string or all database host details");
+        return;
+      }
     }
+
     setIsSavingDb(true);
     try {
-      await updateDbConfig(dbUrlInput);
+      await updateDbConfig(urlToUse);
       showStatus("Connection string updated and verified! ✅");
       handleTestConnection();
     } catch (err: any) {
@@ -358,7 +376,7 @@ export const Settings: React.FC = () => {
   ];
 
   return (
-    <div className="h-full bg-slate-50/50 overflow-y-auto p-4 lg:p-10">
+    <div className="h-full bg-slate-50 overflow-y-auto p-4 lg:p-10">
       <div className="max-w-7xl mx-auto">
         {/* Module Switcher Header */}
         <div className="flex flex-wrap gap-2 mb-10 bg-white p-2 rounded-2xl border border-gray-100 shadow-sm w-fit">
@@ -383,11 +401,11 @@ export const Settings: React.FC = () => {
               <div className="p-2.5 bg-white border border-slate-200 shadow-sm rounded-xl">
                 <SettingsIcon size={22} className="text-rose-600" />
               </div>
-              {activeModule.toUpperCase()} SETTINGS
+              {activeModule === 'infra' ? 'INFRA SETTINGS' : `${activeModule.toUpperCase()} SETTINGS`}
             </h3>
             <p className="text-slate-500 text-xs mt-1.5 font-bold uppercase tracking-widest opacity-60">
               {activeModule === 'workforce' && 'WFM Engine & Operational Rules'}
-              {activeModule === 'infra' && 'SQL Database & System Endpoints'}
+              {activeModule === 'infra' && 'SQL DATABASE & SYSTEM ENDPOINTS'}
               {activeModule === 'hc' && 'Human Capital & Personnel Registry'}
               {activeModule === 'security' && 'Identity Lifecycle & Security Gates'}
               {activeModule === 'analytics' && 'Business Intelligence & KPI Kernels'}
@@ -588,7 +606,7 @@ export const Settings: React.FC = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                   {Object.keys(roles).map(roleName => (
                     <div key={roleName} className="bg-white border border-slate-200 rounded-[2.5rem] shadow-xl flex flex-col overflow-hidden">
-                      <div className="bg-slate-950 p-6 border-b border-slate-800 font-black text-[10px] uppercase tracking-[0.2em] text-white text-center">{roleName}</div>
+                      <div className="bg-slate-100 p-6 border-b border-slate-200 font-black text-[10px] uppercase tracking-[0.2em] text-slate-900 text-center">{roleName}</div>
                       <div className="p-8 space-y-4">
                         {['isAdmin', 'canEditSchedule', 'canSeeAll', 'canSwap'].map(perm => (
                           <label key={perm} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl cursor-pointer group hover:bg-slate-100 transition-colors">
@@ -689,92 +707,93 @@ export const Settings: React.FC = () => {
       )}
 
       {activeModule === 'infra' && (
-        <div className="animate-in fade-in slide-in-from-top-4 duration-300 max-w-5xl mx-auto p-6 md:p-10">
-          <div className="bg-slate-950 p-8 rounded-[2.5rem] border border-slate-800 shadow-2xl mb-10">
-            <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-10">
-              <div className="flex-1">
-                <h4 className="m-0 mb-2 text-white text-base font-black flex items-center gap-2.5 tracking-widest uppercase">
-                  <Database size={18} className="text-rose-600" />
-                  SQL INFRASTRUCTURE
-                </h4>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Active Relational Database Connection Kernel</p>
-                <div className="mt-6 space-y-4">
-                  <div>
-                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2 px-1 text-left">Connection String (URL or IP)</label>
-                    <input 
-                      type="password" 
-                      placeholder="postgresql://user:password@host:port/dbname"
-                      value={dbUrlInput}
-                      onChange={(e) => setDbUrlInput(e.target.value)}
-                      className="w-full p-4 bg-slate-900 border border-slate-800 rounded-2xl text-white text-xs font-black outline-none focus:border-rose-500 transition-all font-mono" 
-                    />
-                    <p className="text-[8px] text-slate-600 font-bold mt-2 px-1 uppercase">Warning: Sensitive connection data is encrypted in transit but stored in kernel memory.</p>
+        <div className="animate-in fade-in slide-in-from-top-4 duration-300 p-6 md:p-10">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6 mb-10">
+            <div className="flex-1">
+              <h4 className="m-0 mb-2 text-slate-900 text-base font-black flex items-center gap-2.5 tracking-widest uppercase">
+                <Database size={18} className="text-rose-600" />
+                SQL INFRASTRUCTURE
+              </h4>
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tight">Active Relational Database Connection Kernel</p>
+              <div className="mt-8 space-y-6">
+                <div>
+                  <div className="flex items-center justify-between mb-2 px-1">
+                    <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest block">Connection String (URL or IP)</label>
+                    <span className="text-[8px] text-slate-400 font-black uppercase tracking-tighter italic">Recommended: postgresql://user:pass@host:port/db</span>
                   </div>
+                  <input 
+                    type="password" 
+                    placeholder="postgresql://user:password@host:port/dbname"
+                    value={dbUrlInput}
+                    onChange={(e) => setDbUrlInput(e.target.value)}
+                    className="w-full p-5 bg-slate-50 border border-slate-200 rounded-[1.25rem] text-slate-900 text-xs font-black outline-none focus:border-rose-500 transition-all font-mono placeholder:text-slate-300" 
+                  />
+                  <p className="text-[8px] text-slate-400 font-bold mt-3 px-1 uppercase tracking-tight">Warning: Sensitive connection data is encrypted in transit but stored in kernel memory.</p>
                 </div>
-                {dbStatus && (
-                  <div className={`mt-4 p-3 rounded-xl border text-[10px] font-black uppercase tracking-widest flex items-center gap-2 ${dbStatus.database ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-rose-500/10 border-rose-500/30 text-rose-400'}`}>
-                    <AlertCircle size={14} />
-                    {dbStatus.database ? 'Database Connection Active' : dbStatus.error || 'DATABASE_URL Missing'}
-                  </div>
-                )}
               </div>
-              <div className="flex flex-col sm:flex-row gap-2.5 w-full md:w-auto self-end">
-                <button 
-                  disabled={isTestingDb}
-                  onClick={handleTestConnection} 
-                  className="flex-1 md:flex-none px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2.5 transition-all bg-white text-slate-950 hover:bg-slate-100 shadow-lg active:scale-95 disabled:opacity-50"
-                >
-                  {isTestingDb ? <RefreshCw size={14} className="animate-spin" /> : null}
-                  {isTestingDb ? 'Testing...' : 'Check Status'}
-                </button>
-                <button 
-                  disabled={isSavingDb}
-                  onClick={handleSaveDbUrl}
-                  className="flex-1 md:flex-none px-5 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2.5 transition-all bg-rose-600 text-white hover:bg-rose-700 shadow-lg shadow-rose-900 active:scale-95 disabled:opacity-50"
-                >
-                  {isSavingDb ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
-                  {isSavingDb ? 'Connecting...' : 'Update & Connect'}
-                </button>
+              {dbStatus && (
+                <div className={`mt-6 p-4 rounded-2xl border text-[10px] font-black uppercase tracking-widest flex items-center gap-2.5 ${dbStatus.database ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600' : 'bg-rose-500/10 border-rose-500/30 text-rose-600'}`}>
+                  <AlertCircle size={15} />
+                  {dbStatus.database ? 'Database Connection Active & Secured' : dbStatus.error || 'DATABASE_URL Missing from Environment'}
+                </div>
+              )}
+            </div>
+            <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto self-end">
+              <button 
+                disabled={isTestingDb}
+                onClick={handleTestConnection} 
+                className="flex-1 md:flex-none px-6 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2.5 transition-all bg-white border border-slate-200 text-slate-950 hover:bg-slate-50 shadow-xl active:scale-95 disabled:opacity-50"
+              >
+                {isTestingDb ? <RefreshCw size={14} className="animate-spin" /> : null}
+                {isTestingDb ? 'Verifying...' : 'Check Status'}
+              </button>
+              <button 
+                disabled={isSavingDb}
+                onClick={handleSaveDbUrl}
+                className="flex-1 md:flex-none px-6 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2.5 transition-all bg-rose-600 text-white hover:bg-rose-700 shadow-xl shadow-rose-900/10 active:scale-95 disabled:opacity-50"
+              >
+                {isSavingDb ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
+                {isSavingDb ? 'Initializing...' : 'Update & Connect'}
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="space-y-6">
+              <div>
+                <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-3 px-1">Database Host</label>
+                <input type="text" value={sqlConfig.host} onChange={e => setSqlConfig({...sqlConfig, host: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 text-xs font-black outline-none focus:border-rose-500 transition-all font-mono" />
+              </div>
+              <div>
+                <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-3 px-1">Target Schema / DB Name</label>
+                <input type="text" value={sqlConfig.database} onChange={e => setSqlConfig({...sqlConfig, database: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 text-xs font-black outline-none focus:border-rose-500 transition-all font-mono" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-3 px-1">Port</label>
+                  <input type="text" value={sqlConfig.port} onChange={e => setSqlConfig({...sqlConfig, port: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 text-xs font-black outline-none focus:border-rose-500 transition-all font-mono" />
+                </div>
+                <div className="flex items-end pb-3">
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input type="checkbox" checked={sqlConfig.ssl} onChange={e => setSqlConfig({...sqlConfig, ssl: e.target.checked})} className="w-5 h-5 text-rose-600 rounded border-slate-200 bg-white" />
+                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">SSL Enabled</span>
+                  </label>
+                </div>
               </div>
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="space-y-6">
-                <div>
-                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-3 px-1">Database Host</label>
-                  <input type="text" value={sqlConfig.host} onChange={e => setSqlConfig({...sqlConfig, host: e.target.value})} className="w-full p-4 bg-slate-900 border border-slate-800 rounded-2xl text-white text-xs font-black outline-none focus:border-rose-500 transition-all font-mono" />
-                </div>
-                <div>
-                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-3 px-1">Target Schema / DB Name</label>
-                  <input type="text" value={sqlConfig.database} onChange={e => setSqlConfig({...sqlConfig, database: e.target.value})} className="w-full p-4 bg-slate-900 border border-slate-800 rounded-2xl text-white text-xs font-black outline-none focus:border-rose-500 transition-all font-mono" />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-3 px-1">Port</label>
-                    <input type="text" value={sqlConfig.port} onChange={e => setSqlConfig({...sqlConfig, port: e.target.value})} className="w-full p-4 bg-slate-900 border border-slate-800 rounded-2xl text-white text-xs font-black outline-none focus:border-rose-500 transition-all font-mono" />
-                  </div>
-                  <div className="flex items-end pb-3">
-                    <label className="flex items-center gap-3 cursor-pointer">
-                      <input type="checkbox" checked={sqlConfig.ssl} onChange={e => setSqlConfig({...sqlConfig, ssl: e.target.checked})} className="w-5 h-5 text-rose-600 rounded border-slate-800 bg-slate-900" />
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">SSL Enabled</span>
-                    </label>
-                  </div>
-                </div>
+            <div className="space-y-6">
+              <div>
+                <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-3 px-1">Access Principal (User)</label>
+                <input type="text" value={sqlConfig.username} onChange={e => setSqlConfig({...sqlConfig, username: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 text-xs font-black outline-none focus:border-rose-500 transition-all font-mono" />
               </div>
-              <div className="space-y-6">
-                <div>
-                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-3 px-1">Access Principal (User)</label>
-                  <input type="text" value={sqlConfig.username} onChange={e => setSqlConfig({...sqlConfig, username: e.target.value})} className="w-full p-4 bg-slate-900 border border-slate-800 rounded-2xl text-white text-xs font-black outline-none focus:border-rose-500 transition-all font-mono" />
-                </div>
-                <div>
-                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-3 px-1">Principal Secret (Password)</label>
-                  <input type="password" value={sqlConfig.password} onChange={e => setSqlConfig({...sqlConfig, password: e.target.value})} className="w-full p-4 bg-slate-900 border border-slate-800 rounded-2xl text-white text-xs font-black outline-none focus:border-rose-500 transition-all font-mono" />
-                </div>
-                <div className="bg-slate-900/50 p-6 rounded-2xl border border-slate-800/50">
-                  <p className="text-[9px] text-slate-500 font-bold leading-relaxed uppercase tracking-tight">
-                    System ensures connection persistence via regional SQL kernels. Principal must have read/write permissions on the target schema.
-                  </p>
-                </div>
+              <div>
+                <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-3 px-1">Principal Secret (Password)</label>
+                <input type="password" value={sqlConfig.password} onChange={e => setSqlConfig({...sqlConfig, password: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 text-xs font-black outline-none focus:border-rose-500 transition-all font-mono" />
+              </div>
+              <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                <p className="text-[9px] text-slate-400 font-bold leading-relaxed uppercase tracking-tight">
+                  System ensures connection persistence via regional SQL kernels. Principal must have read/write permissions on the target schema.
+                </p>
               </div>
             </div>
           </div>
@@ -782,7 +801,7 @@ export const Settings: React.FC = () => {
       )}
 
         {activeModule === 'hc' && (
-          <div className="animate-in fade-in slide-in-from-top-4 duration-300 max-w-5xl mx-auto p-6 md:p-10">
+          <div className="animate-in fade-in slide-in-from-top-4 duration-300 p-6 md:p-10">
              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-200">
                  <h4 className="text-[11px] font-black uppercase tracking-widest mb-6 border-b border-slate-200 pb-4">Employment Classifications</h4>
@@ -813,7 +832,7 @@ export const Settings: React.FC = () => {
         )}
 
         {activeModule === 'security' && (
-          <div className="animate-in fade-in slide-in-from-top-4 duration-300 max-w-5xl mx-auto p-6 md:p-10">
+          <div className="animate-in fade-in slide-in-from-top-4 duration-300 p-6 md:p-10">
              <div className="bg-slate-50 p-8 rounded-[2rem] border border-slate-200 mb-8">
                 <h4 className="text-[11px] font-black uppercase tracking-widest mb-6 border-b border-slate-200 pb-4">Standard Account Prefixes</h4>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -843,15 +862,15 @@ export const Settings: React.FC = () => {
         )}
 
         {activeModule === 'analytics' && (
-           <div className="animate-in fade-in slide-in-from-top-4 duration-300 max-w-5xl mx-auto p-6 md:p-10">
-              <div className="bg-slate-950 p-10 rounded-[2.5rem] border border-slate-800 shadow-2xl mb-10">
-                 <h4 className="text-white text-xs font-black uppercase tracking-[0.2em] mb-8">Performance Target Kernels</h4>
+           <div className="animate-in fade-in slide-in-from-top-4 duration-300 p-6 md:p-10">
+              <div className="bg-slate-50 p-10 rounded-[2.5rem] border border-slate-200 shadow-sm mb-10">
+                 <h4 className="text-slate-900 text-xs font-black uppercase tracking-[0.2em] mb-8">Performance Target Kernels</h4>
                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
                     {Object.entries(kpiTargets).map(([key, val]) => (
-                       <div key={key} className="bg-slate-900 p-6 rounded-2xl border border-slate-800">
+                       <div key={key} className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
                           <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-4">{key}</label>
                           <div className="flex items-end gap-2">
-                             <input type="number" value={val} onChange={(e) => setKpiTargets({...kpiTargets, [key]: parseInt(e.target.value)})} className="bg-transparent text-white text-3xl font-black outline-none w-20" />
+                             <input type="number" value={val} onChange={(e) => setKpiTargets({...kpiTargets, [key]: parseInt(e.target.value)})} className="bg-transparent text-slate-900 text-3xl font-black outline-none w-20" />
                              <span className="text-rose-600 font-black mb-1">{key === 'AHT' ? 's' : '%'}</span>
                           </div>
                        </div>
@@ -862,7 +881,7 @@ export const Settings: React.FC = () => {
         )}
 
         {activeModule === 'facility' && (
-           <div className="animate-in fade-in slide-in-from-top-4 duration-300 max-w-5xl mx-auto p-6 md:p-10 text-center py-20">
+           <div className="animate-in fade-in slide-in-from-top-4 duration-300 p-6 md:p-10 text-center py-20">
               <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-6">
                  <Globe className="text-slate-200" size={32} />
               </div>

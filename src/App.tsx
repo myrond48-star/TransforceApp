@@ -151,7 +151,7 @@ export default function App() {
   );
 
   return (
-    <div className="min-h-screen flex flex-col font-sans bg-[#FAFAFA]">
+    <div className="min-h-screen flex flex-col font-sans bg-slate-50">
       {/* Header */}
       <header className="bg-white border-b border-gray-100 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 h-20 flex items-center justify-between">
