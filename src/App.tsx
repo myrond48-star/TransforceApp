@@ -21,7 +21,8 @@ import {
   Settings as SettingsIcon,
   Bell,
   Menu,
-  X
+  X,
+  LogOut
 } from "lucide-react";
 
 interface Category {
@@ -90,8 +91,28 @@ const itemVariants = {
 
 export default function App() {
   console.log("App component initializing...");
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    return localStorage.getItem("isLoggedIn") === "true" || sessionStorage.getItem("isLoggedIn") === "true";
+  });
   const [activeModule, setActiveModule] = useState<string | null>(null);
+
+  const handleLogin = (remember: boolean) => {
+    setIsLoggedIn(true);
+    if (remember) {
+      localStorage.setItem("isLoggedIn", "true");
+    } else {
+      sessionStorage.setItem("isLoggedIn", "true");
+    }
+  };
+
+  const handleLogout = () => {
+    setIsLoggedIn(false);
+    localStorage.removeItem("isLoggedIn");
+    sessionStorage.removeItem("isLoggedIn");
+    setActiveTab("dashboard");
+    setActiveModule(null);
+  };
+
   const [activeTab, setActiveTab] = useState<"dashboard" | "settings" | "about">("dashboard");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
@@ -103,7 +124,7 @@ export default function App() {
   });
 
   if (!isLoggedIn) {
-    return <LoginPage onLogin={() => setIsLoggedIn(true)} />;
+    return <LoginPage onLogin={handleLogin} />;
   }
 
   const NavLinks = () => (
@@ -179,6 +200,13 @@ export default function App() {
                 <div className="w-8 h-8 sm:w-9 h-9 rounded-full bg-black flex items-center justify-center text-white font-bold text-[10px] sm:text-xs shadow-lg shadow-black/10">
                   AM
                 </div>
+                <button 
+                  onClick={handleLogout}
+                  className="p-2 text-neutral-gray hover:text-active-red transition-colors ml-1"
+                  title="Logout"
+                >
+                  <LogOut className="w-4 h-4" />
+                </button>
               </div>
             </div>
           </div>

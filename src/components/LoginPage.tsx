@@ -3,13 +3,14 @@ import { motion } from "motion/react";
 import { User, Lock, ChevronRight, Globe, ShieldCheck } from "lucide-react";
 
 interface LoginPageProps {
-  onLogin: () => void;
+  onLogin: (remember: boolean) => void;
 }
 
 export default function LoginPage({ onLogin }: LoginPageProps) {
   console.log("LoginPage rendering...");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -21,7 +22,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
     // Simulate login logic
     setTimeout(() => {
       if (username === "admin" && password === "password123") {
-        onLogin();
+        onLogin(rememberMe);
       } else {
         setError("Invalid credentials. Please use admin / password123");
         setIsLoading(false);
@@ -151,7 +152,12 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
               <div className="flex items-center justify-between px-1">
                 <label className="flex items-center gap-2 cursor-pointer group">
                   <div className="relative flex items-center justify-center">
-                    <input type="checkbox" className="peer sr-only" />
+                    <input 
+                      type="checkbox" 
+                      className="peer sr-only" 
+                      checked={rememberMe}
+                      onChange={(e) => setRememberMe(e.target.checked)}
+                    />
                     <div className="w-4 h-4 rounded border border-gray-300 bg-white peer-checked:bg-[#D1102B] peer-checked:border-[#D1102B] transition-all" />
                     <div className="absolute opacity-0 peer-checked:opacity-100 text-white flex items-center justify-center pointer-events-none">
                       <div className="w-1.5 h-1 text-white border-b-2 border-l-2 rotate-[-45deg] translate-y-[-1px]" />
