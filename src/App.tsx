@@ -89,6 +89,7 @@ const itemVariants = {
 };
 
 export default function App() {
+  console.log("App component initializing...");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [activeModule, setActiveModule] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<"dashboard" | "settings" | "about">("dashboard");
