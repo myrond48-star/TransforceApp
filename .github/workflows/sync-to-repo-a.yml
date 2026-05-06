@@ -15,13 +15,21 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Hitung / Cek Token
+        env:
+          PAT: ${{ secrets.PAT_REPO_A }}
+        run: |
+          if [ -z "$PAT" ]; then
+            echo "::error::Secret PAT_REPO_A belum diset atau kosong! Silakan tambahkan di Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+
       - name: Push kode ke Repositori A
         env:
-          # HAPUS https:// agar tidak dobel. Tambahkan .git di belakangnya
           TARGET_REPO: "github.com/taqienahmad/TransForce-Management-Dashboard.git" 
           TARGET_BRANCH: "main"
         run: |
-          # Menambahkan Repositori A sebagai tujuan dengan menggunakan Token Rahasia
+          # Menambahkan Repositori A sebagai tujuan
           git remote add repo-a https://${{ secrets.PAT_REPO_A }}@$TARGET_REPO
           
           # Mendorong kode dari Repo B ke Repo A
