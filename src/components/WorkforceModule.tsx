@@ -21,7 +21,11 @@ import {
   Zap,
   History,
   ClipboardCheck,
-  Database
+  Database,
+  ChevronDown,
+  MoreHorizontal,
+  UserCheck,
+  UserCircle
 } from "lucide-react";
 import { 
   XAxis, 
@@ -73,6 +77,29 @@ const mockAgents = [
   { id: "WF003", name: "John Wick", shift: "S2", team: "High Priority", activities: { 70: "LB", 71: "LB", 72: "LB", 73: "LB" } },
   { id: "WF004", name: "Ellen Ripley", shift: "S1", team: "Support A", activities: { 32: "TR", 33: "TR", 34: "TR", 35: "TR" } },
   { id: "WF005", name: "Arthur Dent", shift: "H", team: "Support B", activities: { 44: "LB", 45: "LB", 46: "LB", 47: "LB" } },
+  ...Array.from({ length: 35 }).map((_, i) => {
+    const shiftOpts = ["S1", "S2", "H"];
+    const teamOpts = ["Support A", "Support B", "High Priority", "Technical"];
+    const shift = shiftOpts[Math.floor(Math.random() * shiftOpts.length)];
+    const team = teamOpts[Math.floor(Math.random() * teamOpts.length)];
+    const id = "WF" + String(i + 6).padStart(3, '0');
+    const firsts = ["James", "Maria", "Michael", "Linda", "Robert", "David", "Jessica", "Daniel", "Emily", "Jane", "Alice", "Bob", "Charlie", "Dave", "Eve", "Frank"];
+    const lasts = ["Smith", "Johnson", "Williams", "Jones", "Brown", "Davis", "Miller", "Wilson", "Moore", "Taylor", "Anderson", "Thomas", "Jackson", "White", "Harris", "Martin"];
+    const name = firsts[Math.floor(Math.random() * firsts.length)] + " " + lasts[Math.floor(Math.random() * lasts.length)];
+    let breakStart = shift === "S1" ? 20 + Math.floor(Math.random() * 8) : shift === "H" ? 40 + Math.floor(Math.random() * 8) : 68 + Math.floor(Math.random() * 8);
+    return {
+      id,
+      name,
+      shift,
+      team,
+      activities: {
+        [breakStart]: "LB",
+        [breakStart + 1]: "LB",
+        [breakStart + 2]: "LB",
+        [breakStart + 3]: "LB",
+      }
+    };
+  })
 ];
 
 const reqData = Array.from({ length: 96 }).map((_, i) => {
@@ -99,116 +126,194 @@ const reqData = Array.from({ length: 96 }).map((_, i) => {
 export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
   const [activeTab, setActiveTab] = useState("schedule");
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [selectedTeam, setSelectedTeam] = useState("all");
+  const [sortConfig, setSortConfig] = useState<{ key: 'name' | 'interval' | 'activity', direction: 'asc' | 'desc' }>({ key: 'name', direction: 'asc' });
+  const [showActions, setShowActions] = useState(false);
 
   const timeToIndex = (timeStr: string) => {
     const [h, m] = timeStr.split(":").map(Number);
     return h * 4 + Math.floor(m / 15);
   };
 
-  const renderScheduleGrid = () => (
-    <div className="space-y-6 sm:space-y-8">
-      {/* Quick Stats Banner */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-        {[
-          { label: "Overall Adherence", value: "94.8%", trend: "+2.1%", icon: CheckCircle2, color: "text-green-600" },
-          { label: "Current Service Level", value: "88.2%", trend: "-1.5%", icon: Zap, color: "text-active-red" },
-          { label: "Total Headcount", value: "412", trend: "+12", icon: Users, color: "text-black" },
-          { label: "Resource Gap", value: "-04", trend: "Critical", icon: AlertCircle, color: "text-active-red" },
-        ].map((stat, i) => (
-          <div key={i} className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between">
-            <div>
-              <p className="text-[9px] sm:text-[10px] font-bold text-neutral-gray uppercase tracking-widest mb-1">{stat.label}</p>
-              <p className="text-xl sm:text-2xl font-black text-black">{stat.value}</p>
-              <p className={`text-[9px] sm:text-[10px] font-bold mt-1 ${stat.trend.startsWith('+') ? 'text-green-600' : 'text-active-red'}`}>
-                {stat.trend} <span className="text-gray-300 font-medium hidden xs:inline">vs target</span>
-              </p>
-            </div>
-            <div className="p-2.5 sm:p-3 bg-gray-50 rounded-xl">
-              <stat.icon className={`w-4 sm:w-5 h-4 sm:h-5 ${stat.color} stroke-[1.5]`} />
-            </div>
-          </div>
-        ))}
-      </div>
+  const renderScheduleGrid = () => {
+    const teams = ["all", "Support A", "Support B", "High Priority", "Technical"];
+    
+    const filteredAgents = mockAgents
+      .filter(a => a.name.toLowerCase().includes(searchQuery.toLowerCase()))
+      .filter(a => selectedTeam === "all" || a.team === selectedTeam)
+      .sort((a, b) => {
+        if (sortConfig.key === 'name') {
+          return sortConfig.direction === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
+        }
+        if (sortConfig.key === 'interval') {
+          const shiftA = SHIFTS[a.shift as keyof typeof SHIFTS].start;
+          const shiftB = SHIFTS[b.shift as keyof typeof SHIFTS].start;
+          return sortConfig.direction === 'asc' ? shiftA.localeCompare(shiftB) : shiftB.localeCompare(shiftA);
+        }
+        // Simplified activity sort (just by presence of initial activity)
+        return 0;
+      });
 
-      <div className="bg-white rounded-2xl sm:rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
-        {/* Grid Toolbar */}
-        <div className="p-4 sm:p-6 border-b border-gray-50 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
-            <div className="relative w-full sm:w-64 lg:w-80">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-gray" />
-              <input 
-                type="text" 
-                placeholder="FIND AGENT..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-gray-50 border-none rounded-xl pl-10 pr-4 py-2.5 text-[11px] font-bold uppercase tracking-tight focus:ring-1 focus:ring-active-red/20 outline-none"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="h-8 w-px bg-gray-100 hidden sm:block" />
-              <div className="flex-1 sm:flex-none flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 rounded-lg border border-gray-100 cursor-pointer hover:bg-gray-100">
-                <Filter className="w-3.5 h-3.5 text-neutral-gray" />
-                <span className="text-[10px] font-bold uppercase tracking-widest text-neutral-gray">Teams</span>
+    return (
+      <div className="space-y-6 sm:space-y-8">
+        {/* Quick Stats Banner */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+          {[
+            { label: "Overall Adherence", value: "94.8%", trend: "+2.1%", icon: CheckCircle2, color: "text-green-600" },
+            { label: "Current Service Level", value: "88.2%", trend: "-1.5%", icon: Zap, color: "text-active-red" },
+            { label: "Total Headcount", value: "412", trend: "+12", icon: Users, color: "text-black" },
+            { label: "Resource Gap", value: "-04", trend: "Critical", icon: AlertCircle, color: "text-active-red" },
+          ].map((stat, i) => (
+            <div key={i} className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between">
+              <div>
+                <p className="text-[9px] sm:text-[10px] font-bold text-neutral-gray uppercase tracking-widest mb-1">{stat.label}</p>
+                <p className="text-xl sm:text-2xl font-black text-black">{stat.value}</p>
+                <p className={`text-[9px] sm:text-[10px] font-bold mt-1 ${stat.trend.startsWith('+') ? 'text-green-600' : 'text-active-red'}`}>
+                  {stat.trend} <span className="text-gray-300 font-medium hidden xs:inline">vs target</span>
+                </p>
+              </div>
+              <div className="p-2.5 sm:p-3 bg-gray-50 rounded-xl">
+                <stat.icon className={`w-4 sm:w-5 h-4 sm:h-5 ${stat.color} stroke-[1.5]`} />
               </div>
             </div>
-          </div>
-
-          <div className="flex items-center justify-between sm:justify-end gap-2">
-            <button className="p-2.5 bg-gray-50 rounded-xl hover:bg-gray-100 transition-colors border border-gray-100">
-              <FilterX className="w-4 h-4 text-neutral-gray" />
-            </button>
-            <div className="h-8 w-px bg-gray-100 mx-1 hidden sm:block" />
-            <button className="flex-1 sm:flex-none px-4 sm:px-5 py-2.5 bg-black text-white rounded-xl text-[10px] font-bold uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-active-red transition-all shadow-lg shadow-black/10">
-              <Download className="w-3.5 h-3.5" /> <span className="hidden xs:inline">Export</span>
-            </button>
-          </div>
+          ))}
         </div>
 
-        {/* The Grid Table */}
-        <div className="overflow-x-auto relative">
-          <table className="border-separate border-spacing-0 table-fixed w-full min-w-[800px]">
-            <thead>
-              {/* Actual Online Mini Chart Row */}
-              <tr className="bg-gray-50/50">
-                <th className="sticky left-0 z-40 bg-gray-50 pb-3 h-12 w-[180px] sm:w-[220px] px-4 sm:px-6 border-r border-gray-200">
-                  <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest block text-left">Coverage Pulse</span>
-                </th>
-                {intervals.map((_, i) => {
-                  const staffed = reqData[i].actual;
-                  const demand = reqData[i].req;
-                  const gap = staffed - demand;
-                  
-                  let barColorClass = "bg-slate-200";
-                  if (gap < -2) barColorClass = "bg-rose-500 shadow-[0_0_10px_rgba(225,29,72,0.3)]";
-                  else if (gap < 0) barColorClass = "bg-amber-400";
-                  else if (gap > 2) barColorClass = "bg-emerald-500";
-                  else barColorClass = "bg-blue-500";
-                  
-                  return (
-                    <th key={i} className="w-[18px] sm:w-[22px] p-0 align-bottom group/pulse relative">
-                      <div 
-                        className={`w-[80%] mx-auto ${barColorClass} rounded-full transition-all duration-500 hover:brightness-125 group-hover/pulse:w-full`} 
-                        style={{ height: `${(staffed / 40) * 100}%`, minHeight: '6px' }} 
-                      />
-                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/pulse:block z-50 bg-slate-900 text-white text-[9px] font-black px-2 py-1 rounded-lg pointer-events-none whitespace-nowrap shadow-xl border border-slate-800">
-                        <div className="flex flex-col items-center gap-1">
-                          <span className="text-[10px] text-slate-400">{intervals[i]}</span>
-                          <span className="flex items-center gap-2">
-                             <span className="text-emerald-400">{staffed} ATB</span>
-                             <span className="text-slate-500">/</span>
-                             <span className="text-indigo-400">{demand} REQ</span>
-                          </span>
-                        </div>
-                      </div>
+        <div className="bg-white rounded-2xl sm:rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
+          {/* Grid Toolbar */}
+          <div className="p-4 sm:p-6 border-b border-gray-50 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-gray" />
+                  <input 
+                    type="date"
+                    value={selectedDate}
+                    onChange={(e) => setSelectedDate(e.target.value)}
+                    className="bg-gray-50 border-none rounded-xl pl-9 pr-3 py-2 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-1 focus:ring-black/10"
+                  />
+                </div>
+              </div>
+              <div className="relative w-full sm:w-64">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-gray" />
+                <input 
+                  type="text" 
+                  placeholder="FIND AGENT..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full bg-gray-50 border-none rounded-xl pl-10 pr-4 py-2.5 text-[10px] font-black uppercase tracking-tight focus:ring-1 focus:ring-active-red/20 outline-none"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <select 
+                  value={selectedTeam}
+                  onChange={(e) => setSelectedTeam(e.target.value)}
+                  className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-2.5 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-1 focus:ring-black/10"
+                >
+                  {teams.map(t => <option key={t} value={t}>{t === "all" ? "ALL TEAMS" : t.toUpperCase()}</option>)}
+                </select>
+                <select 
+                  value={`${sortConfig.key}-${sortConfig.direction}`}
+                  onChange={(e) => {
+                    const [key, direction] = e.target.value.split('-') as [any, any];
+                    setSortConfig({ key, direction });
+                  }}
+                  className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-2.5 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-1 focus:ring-black/10"
+                >
+                  <option value="name-asc">NAME (A-Z)</option>
+                  <option value="name-desc">NAME (Z-A)</option>
+                  <option value="interval-asc">INTERVAL (EARLY)</option>
+                  <option value="interval-desc">INTERVAL (LATE)</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 relative">
+              <button 
+                onClick={() => setShowActions(!showActions)}
+                className="flex-1 sm:flex-none px-6 py-2.5 bg-black text-white rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-neutral-800 transition-all shadow-lg shadow-black/10"
+              >
+                Actions <ChevronDown size={14} />
+              </button>
+              
+              <AnimatePresence>
+                {showActions && (
+                   <motion.div 
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    className="absolute top-full right-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 z-[60]"
+                   >
+                      {[
+                        { label: "Swap Shift", icon: History },
+                        { label: "Approval", icon: ShieldCheck },
+                        { label: "Auto Break", icon: Coffee },
+                        { label: "Download", icon: Download },
+                      ].map((item, i) => (
+                        <button 
+                          key={i}
+                          className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 rounded-xl text-[10px] font-black text-slate-600 uppercase tracking-widest transition-colors"
+                        >
+                          <item.icon size={14} className="text-slate-400" />
+                          {item.label}
+                        </button>
+                      ))}
+                   </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+
+          {/* The Grid Table */}
+          <div className="overflow-x-auto relative">
+            <table className="border-separate border-spacing-0 table-fixed w-full min-w-[2800px]">
+              <thead>
+                {/* Agent Actual Row */}
+                <tr className="bg-white">
+                  <th className="sticky left-0 z-40 bg-white h-12 w-[180px] sm:w-[220px] px-4 sm:px-6 border-r border-gray-200 border-b border-gray-50">
+                    <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest block text-left">Agent Actual</span>
+                  </th>
+                  {intervals.map((_, i) => (
+                    <th key={i} className="text-[8px] sm:text-[9px] font-black text-slate-700 border-b border-gray-50 h-12 align-middle min-w-[28px] px-0.5 text-center">
+                      {Math.round(reqData[i].actual)}
                     </th>
-                  );
-                })}
-              </tr>
-              {/* Time Indicators */}
-              <tr className="bg-white">
-                <th className="sticky left-0 z-40 bg-white w-[180px] sm:w-[220px] px-4 sm:px-6 py-2 border-r border-gray-200 border-b border-gray-100 font-bold text-[9px] sm:text-[10px] text-black text-left uppercase tracking-widest">
-                  Agent Identity
-                </th>
+                  ))}
+                </tr>
+                {/* Agent FTE Row */}
+                <tr className="bg-white">
+                  <th className="sticky left-0 z-40 bg-white h-12 w-[180px] sm:w-[220px] px-4 sm:px-6 border-r border-gray-200 border-b border-gray-50">
+                    <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest block text-left">Agent FTE</span>
+                  </th>
+                  {intervals.map((_, i) => (
+                    <th key={i} className="text-[8px] sm:text-[9px] font-black text-slate-700 border-b border-gray-50 h-12 align-middle min-w-[28px] px-0.5 text-center">
+                      {Math.round(reqData[i].actual * 0.85)}
+                    </th>
+                  ))}
+                </tr>
+                {/* Coverage Gap Row */}
+                <tr className="bg-slate-50/50">
+                  <th className="sticky left-0 z-40 bg-slate-50 h-12 w-[180px] sm:w-[220px] px-4 sm:px-6 border-r border-gray-200 border-b border-slate-100">
+                    <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest block text-left">Coverage Gap</span>
+                  </th>
+                  {intervals.map((_, i) => {
+                    const actual = Math.round(reqData[i].actual);
+                    const fte = Math.round(actual * 0.85);
+                    const gapValue = actual - fte;
+                    const isMinus = gapValue < 0; 
+                    
+                    return (
+                      <th key={i} className={`text-[8px] sm:text-[9px] font-black h-12 align-middle border-b border-slate-100 min-w-[28px] px-0.5 text-center ${isMinus ? 'text-rose-600' : 'text-emerald-600'}`}>
+                        {gapValue > 0 ? `+${gapValue}` : gapValue}
+                      </th>
+                    );
+                  })}
+                </tr>
+                {/* Time Indicators */}
+                <tr className="bg-white">
+                  <th className="sticky left-0 z-40 bg-white w-[180px] sm:w-[220px] px-4 sm:px-6 py-3 border-r border-gray-200 border-b border-gray-100 font-black text-[10px] text-black text-left uppercase tracking-widest">
+                    Agent Name
+                  </th>
                 {intervals.map((time, i) => (
                   i % 4 === 0 ? (
                     <th key={i} colSpan={4} className="border-b border-gray-100 border-r border-gray-50/50 text-[8px] sm:text-[9px] font-bold text-neutral-gray py-1.5 text-center">
@@ -219,7 +324,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {mockAgents.filter(a => a.name.toLowerCase().includes(searchQuery.toLowerCase())).map((agent, idx) => {
+              {filteredAgents.map((agent, idx) => {
                 const shift = SHIFTS[agent.shift as keyof typeof SHIFTS];
                 const startIdx = timeToIndex(shift.start);
                 const endIdx = timeToIndex(shift.end);
@@ -227,14 +332,15 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                 return (
                   <tr key={agent.id} className="hover:bg-gray-50/50 transition-colors group h-10 sm:h-12">
                     <td className="sticky left-0 z-40 bg-white group-hover:bg-gray-50/80 border-r border-gray-200 px-4 sm:px-6 py-1.5 transition-colors">
-                      <div className="flex items-center gap-2 sm:gap-3">
-                        <div className={`w-7 h-7 sm:w-8 h-8 rounded-lg flex items-center justify-center font-bold text-[9px] sm:text-[10px] transition-all border border-gray-100 ${shift.color} text-white shadow-sm shrink-0`}>
-                          {agent.shift}
-                        </div>
-                        <div className="flex flex-col min-w-0">
+                      <div className="flex flex-col min-w-0 justify-center h-full gap-0.5">
+                        <div className="flex items-center gap-2">
                           <span className="text-[10px] sm:text-[11px] font-bold text-black uppercase tracking-tight truncate">{agent.name}</span>
-                          <span className="text-[8px] sm:text-[9px] font-bold text-neutral-gray uppercase tracking-widest opacity-60 truncate">{agent.team}</span>
+                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold text-white ${shift.color}`}>{agent.shift}</span>
                         </div>
+                        <span className="text-[8px] sm:text-[9px] font-bold text-neutral-gray uppercase tracking-widest opacity-60 truncate">
+                          {agent.team} 
+                          {Object.keys(agent.activities).length > 0 && ` • Break: ${intervals[Math.min(...Object.keys(agent.activities).map(Number))]}`}
+                        </span>
                       </div>
                     </td>
                     {intervals.map((_, i) => {
@@ -247,7 +353,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                       const isShiftEnd = i === endIdx - 1;
                       
                       return (
-                        <td key={i} className="p-0 min-w-[18px] sm:min-w-[22px] relative cursor-pointer group/cell">
+                        <td key={i} className="p-0 min-w-[28px] px-0.5 relative cursor-pointer group/cell h-10 sm:h-12 border-b border-gray-100">
                           {isWithinShift && !activity && (
                             <div className={`absolute inset-y-2 inset-x-0 bg-slate-200 group-hover/cell:bg-blue-100/50 transition-colors ${isShiftStart ? "rounded-l-full ml-0.5" : ""} ${isShiftEnd ? "rounded-r-full mr-0.5" : ""}`} />
                           )}
@@ -295,6 +401,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
       </div>
     </div>
   );
+};
 
   const renderCalendar = () => {
     const dates = Array.from({ length: 14 }).map((_, i) => addMinutes(startOfDay(new Date()), i * 24 * 60));
@@ -645,6 +752,105 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
     </div>
   );
 
+  const renderHistorical = () => {
+    const historicalStats = [
+      { label: "Aug. Service Level", value: "91.2%", status: "Optimal", color: "text-emerald-500" },
+      { label: "Occupancy Avg", value: "82.4%", status: "Healthy", color: "text-blue-500" },
+      { label: "Adherence Avg", value: "95.8%", status: "High", color: "text-indigo-600" },
+      { label: "Absenteeism", value: "4.2%", status: "Stable", color: "text-rose-500" },
+    ];
+
+    const historicalLogs = [
+      { date: "2026-05-05", interval: "09:00 - 09:15", req: 42, actual: 44, sl: "98.2%", color: "text-emerald-500" },
+      { date: "2026-05-05", interval: "09:15 - 09:30", req: 45, actual: 42, sl: "88.4%", color: "text-amber-500" },
+      { date: "2026-05-05", interval: "09:30 - 09:45", req: 48, actual: 40, sl: "72.1%", color: "text-rose-500" },
+      { date: "2026-05-05", interval: "09:45 - 10:00", req: 44, actual: 44, sl: "95.6%", color: "text-emerald-500" },
+      { date: "2026-05-04", interval: "14:00 - 14:15", req: 38, actual: 39, sl: "99.1%", color: "text-emerald-500" },
+      { date: "2026-05-04", interval: "14:15 - 14:30", req: 40, actual: 38, sl: "86.5%", color: "text-amber-500" },
+    ];
+
+    return (
+      <div className="space-y-8 animate-in fade-in duration-500">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {historicalStats.map((stat, i) => (
+            <div key={i} className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">{stat.label}</p>
+              <div className="flex items-end justify-between">
+                <p className="text-2xl font-black text-slate-950 tracking-tighter">{stat.value}</p>
+                <span className={`text-[9px] font-black uppercase tracking-widest ${stat.color} mb-1.5`}>{stat.status}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="bg-white rounded-[2.5rem] border border-slate-200 shadow-sm overflow-hidden min-h-[500px] flex flex-col">
+          <div className="p-8 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div>
+              <h4 className="text-xs font-black uppercase tracking-widest text-slate-950">Interval History Log</h4>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-tight mt-1">Archived performance metrics across historical intervals</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="relative">
+                <CalendarIcon className="absolute left-3.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                <select className="bg-slate-50 border-none rounded-xl pl-10 pr-6 py-2.5 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-1 focus:ring-black/10">
+                  <option>Last 7 Days</option>
+                  <option>Last 30 Days</option>
+                  <option>Previous Month</option>
+                </select>
+              </div>
+              <button className="p-2.5 bg-slate-900 text-white rounded-xl hover:bg-black transition-colors">
+                <Download size={16} />
+              </button>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto flex-grow">
+            <table className="w-full text-left">
+              <thead className="bg-slate-50/50">
+                <tr>
+                  <th className="px-8 py-5 text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">Date Reference</th>
+                  <th className="px-8 py-5 text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">Interval Window</th>
+                  <th className="px-8 py-5 text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">Req. Capacity</th>
+                  <th className="px-8 py-5 text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">Actual Staffed</th>
+                  <th className="px-8 py-5 text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">Service Level</th>
+                  <th className="px-8 py-5 text-[9px] font-black uppercase tracking-widest text-slate-400 border-b border-slate-100">Action Type</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {historicalLogs.map((log, i) => (
+                  <tr key={i} className="hover:bg-slate-50/30 transition-colors">
+                    <td className="px-8 py-6 text-[11px] font-black text-slate-950 font-mono tracking-tighter">{log.date}</td>
+                    <td className="px-8 py-6 text-[10px] font-bold text-slate-400 uppercase tracking-widest">{log.interval}</td>
+                    <td className="px-8 py-6 text-[11px] font-black text-slate-950">{log.req}</td>
+                    <td className="px-8 py-6 text-[11px] font-black text-slate-950">{log.actual}</td>
+                    <td className="px-8 py-6">
+                      <div className="flex items-center gap-3">
+                        <div className="flex-grow w-16 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                          <div className={`h-full ${log.color.replace('text-', 'bg-')}`} style={{ width: log.sl }} />
+                        </div>
+                        <span className={`text-[11px] font-black ${log.color}`}>{log.sl}</span>
+                      </div>
+                    </td>
+                    <td className="px-8 py-6">
+                      <button className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-950 flex items-center gap-2 transition-colors">
+                        <Database size={12} /> Drill Down
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="p-6 bg-slate-50/50 border-t border-slate-100 flex items-center justify-center">
+            <button className="text-[10px] font-black uppercase tracking-widest text-slate-500 hover:text-black transition-colors underline underline-offset-4">
+              Load Archive (2025 - 2026)
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-500 max-w-full overflow-x-hidden">
       {/* Back & Navigation Header */}
@@ -667,6 +873,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                   { id: "attendance", label: "Attendance", icon: ClipboardCheck },
                   { id: "forecasting", label: "Forecast", icon: TrendingUp },
                   { id: "planning", label: "Planning", icon: CalendarIcon },
+                  { id: "historical", label: "Historical", icon: History },
                 ].map(tab => (
                   <button
                     key={tab.id}
@@ -832,6 +1039,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
           )}
           {activeTab === "attendance" && renderAttendance()}
           {activeTab === "forecasting" && renderForecasting()}
+          {activeTab === "historical" && renderHistorical()}
           {activeTab === "planning" && (
             <div className="py-20 sm:py-40 bg-white rounded-2xl sm:rounded-[40px] border border-gray-100 text-center border-dashed px-6">
                <div className="w-12 h-12 sm:w-16 sm:h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-6">
