@@ -49,22 +49,27 @@ const attritionData = [
   { name: 'May', attrition: 1.5, hiring: 14 },
 ];
 
+const SITES = ["Jakarta", "Surabaya", "Bandung"];
+const UNITS = ["Operation", "Support", "Technology"];
+const PROJECTS = ["Project Alpha", "Project Beta"];
+const LANGUAGES = ["English", "Indonesian", "Japanese"];
+
 const employeeList = [
-  { id: "EMP001", name: "Alexander Mitchell", role: "Ops Lead", status: "Active", joinDate: "2023-05-12", email: "a.mitchell@transforce.com" },
-  { id: "EMP002", name: "Sarah Jenkins", role: "Sr. Analyst", status: "Active", joinDate: "2023-06-15", email: "s.jenkins@transforce.com" },
-  { id: "EMP003", name: "David Chen", role: "Support Spec", status: "On Leave", joinDate: "2024-01-10", email: "d.chen@transforce.com" },
-  { id: "EMP004", name: "Elena Rodriguez", role: "QC Engineer", status: "Active", joinDate: "2022-11-20", email: "e.rodriguez@transforce.com" },
-  { id: "EMP005", name: "Marcus Thorne", role: "Wfm Manager", status: "Active", joinDate: "2023-02-28", email: "m.thorne@transforce.com" },
+  { id: "EMP001", name: "Alexander Mitchell", role: "Ops Lead", status: "Active", joinDate: "2023-05-12", email: "a.mitchell@transforce.com", site: "Jakarta", unit: "Operation", project: "Project Alpha" },
+  { id: "EMP002", name: "Sarah Jenkins", role: "Sr. Analyst", status: "Active", joinDate: "2023-06-15", email: "s.jenkins@transforce.com", site: "Surabaya", unit: "Support", project: "Project Beta" },
+  { id: "EMP003", name: "David Chen", role: "Support Spec", status: "On Leave", joinDate: "2024-01-10", email: "d.chen@transforce.com", site: "Bandung", unit: "Technology", project: "Project Alpha" },
+  { id: "EMP004", name: "Elena Rodriguez", role: "QC Engineer", status: "Active", joinDate: "2022-11-20", email: "e.rodriguez@transforce.com", site: "Jakarta", unit: "Operation", project: "Project Beta" },
+  { id: "EMP005", name: "Marcus Thorne", role: "Wfm Manager", status: "Active", joinDate: "2023-02-28", email: "m.thorne@transforce.com", site: "Surabaya", unit: "Support", project: "Project Alpha" },
 ];
 
 export default function HCManagementModule({ onBack }: HCManagementModuleProps) {
   const [activeView, setActiveView] = useState("overview");
 
   const [filterMode, setFilterMode] = useState<"month" | "range" | "single">("month");
-  const [selectedSite, setSelectedSite] = useState("");
-  const [selectedUnit, setSelectedUnit] = useState("");
-  const [selectedProject, setSelectedProject] = useState("");
-  const [selectedLanguage, setSelectedLanguage] = useState("");
+  const [selectedSite, setSelectedSite] = useState("all");
+  const [selectedUnit, setSelectedUnit] = useState("all");
+  const [selectedProject, setSelectedProject] = useState("all");
+  const [selectedLanguage, setSelectedLanguage] = useState("all");
 
   // CRUD State
   const [employees, setEmployees] = useState(employeeList);
@@ -104,141 +109,27 @@ export default function HCManagementModule({ onBack }: HCManagementModuleProps) 
     setFormData({ id: "", name: "", role: "", status: "Active", joinDate: new Date().toISOString().split('T')[0], email: "" });
   };
 
-  const renderOverview = () => (
-    <div className="space-y-6 sm:space-y-8">
-      {/* Filters Section */}
-      <div className="bg-white p-5 sm:p-6 rounded-2xl border border-gray-100 shadow-sm space-y-6">
-        <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-6">
-          {/* Date Selection */}
-          <div className="space-y-3 flex-1">
-            <div className="flex items-center justify-between xl:justify-start gap-4">
-              <p className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest">Time Dimension</p>
-              <div className="flex bg-gray-100 p-0.5 rounded-lg">
-                {(["month", "range", "single"] as const).map((mode) => (
-                  <button
-                    key={mode}
-                    onClick={() => setFilterMode(mode)}
-                    className={`px-3 py-1 rounded-md text-[9px] font-bold uppercase transition-all ${
-                      filterMode === mode ? "bg-white text-black shadow-sm" : "text-neutral-gray hover:text-black"
-                    }`}
-                  >
-                    {mode}
-                  </button>
-                ))}
-              </div>
+  const renderOverview = () => {
+      const filteredCount = employees
+        .filter(emp => selectedSite === "all" || (emp as any).site === selectedSite)
+        .filter(emp => selectedUnit === "all" || (emp as any).unit === selectedUnit)
+        .filter(emp => selectedProject === "all" || (emp as any).project === selectedProject)
+        .length;
+  
+      return (
+        <div className="space-y-6 sm:space-y-8">
+          {/* Top Stats */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+          <div className="bg-white p-5 sm:p-6 rounded-2xl border border-gray-100 shadow-sm relative overflow-hidden group">
+            <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity hidden sm:block">
+              <Users className="w-16 h-16 text-black" />
             </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {filterMode === "month" && (
-                <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-gray pointer-events-none" />
-                  <input 
-                    type="month" 
-                    className="w-full bg-gray-50 border border-gray-100 rounded-xl pl-10 pr-4 py-2.5 text-[11px] font-bold uppercase focus:ring-1 focus:ring-black outline-none transition-all"
-                  />
-                </div>
-              )}
-              {filterMode === "range" && (
-                <>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-gray pointer-events-none" />
-                    <input 
-                      type="date" 
-                      placeholder="START DATE"
-                      className="w-full bg-gray-50 border border-gray-100 rounded-xl pl-10 pr-4 py-2.5 text-[11px] font-bold uppercase focus:ring-1 focus:ring-black outline-none transition-all"
-                    />
-                  </div>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-gray pointer-events-none" />
-                    <input 
-                      type="date" 
-                      placeholder="END DATE"
-                      className="w-full bg-gray-50 border border-gray-100 rounded-xl pl-10 pr-4 py-2.5 text-[11px] font-bold uppercase focus:ring-1 focus:ring-black outline-none transition-all"
-                    />
-                  </div>
-                </>
-              )}
-              {filterMode === "single" && (
-                <div className="relative">
-                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-gray pointer-events-none" />
-                  <input 
-                    type="date" 
-                    className="w-full bg-gray-50 border border-gray-100 rounded-xl pl-10 pr-4 py-2.5 text-[11px] font-bold uppercase focus:ring-1 focus:ring-black outline-none transition-all"
-                  />
-                </div>
-              )}
+            <p className="text-[9px] sm:text-[10px] font-bold text-neutral-gray uppercase tracking-widest mb-1">Total Active HC</p>
+            <div className="flex items-end gap-3">
+              <p className="text-2xl sm:text-3xl font-black text-black">{filteredCount.toString().padStart(3, '0')}</p>
+              <span className="text-active-red font-bold text-[10px] sm:text-xs mb-1">+12 this month</span>
             </div>
           </div>
-
-          {/* Dimension Filters */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 xl:w-2/3">
-            <div className="space-y-1.5">
-              <label className="text-[9px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Site</label>
-              <select 
-                value={selectedSite}
-                onChange={(e) => setSelectedSite(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-100 rounded-xl px-3 py-2.5 text-[10px] font-bold uppercase focus:ring-1 focus:ring-black outline-none appearance-none transition-all"
-              >
-                <option value="">All Sites</option>
-                <option value="jakarta">Jakarta</option>
-                <option value="surabaya">Surabaya</option>
-                <option value="bandung">Bandung</option>
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[9px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Unit</label>
-              <select 
-                value={selectedUnit}
-                onChange={(e) => setSelectedUnit(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-100 rounded-xl px-3 py-2.5 text-[10px] font-bold uppercase focus:ring-1 focus:ring-black outline-none appearance-none transition-all"
-              >
-                <option value="">All Units</option>
-                <option value="operation">Operation</option>
-                <option value="support">Support</option>
-                <option value="tech">Technology</option>
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[9px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Project</label>
-              <select 
-                value={selectedProject}
-                onChange={(e) => setSelectedProject(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-100 rounded-xl px-3 py-2.5 text-[10px] font-bold uppercase focus:ring-1 focus:ring-black outline-none appearance-none transition-all"
-              >
-                <option value="">All Projects</option>
-                <option value="p1">Project Alpha</option>
-                <option value="p2">Project Beta</option>
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-[9px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Language</label>
-              <select 
-                value={selectedLanguage}
-                onChange={(e) => setSelectedLanguage(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-100 rounded-xl px-3 py-2.5 text-[10px] font-bold uppercase focus:ring-1 focus:ring-black outline-none appearance-none transition-all"
-              >
-                <option value="">All Lang</option>
-                <option value="en">English</option>
-                <option value="id">Indonesian</option>
-                <option value="jp">Japanese</option>
-              </select>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Top Stats */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-        <div className="bg-white p-5 sm:p-6 rounded-2xl border border-gray-100 shadow-sm relative overflow-hidden group">
-          <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity hidden sm:block">
-            <Users className="w-16 h-16 text-black" />
-          </div>
-          <p className="text-[9px] sm:text-[10px] font-bold text-neutral-gray uppercase tracking-widest mb-1">Total Active HC</p>
-          <div className="flex items-end gap-3">
-            <p className="text-2xl sm:text-3xl font-black text-black">428</p>
-            <span className="text-active-red font-bold text-[10px] sm:text-xs mb-1">+12 this month</span>
-          </div>
-        </div>
         <div className="bg-white p-5 sm:p-6 rounded-2xl border border-gray-100 shadow-sm relative overflow-hidden group font-sans">
           <p className="text-[9px] sm:text-[10px] font-bold text-neutral-gray uppercase tracking-widest mb-1">Attrition Rate</p>
           <div className="flex items-end gap-3">
@@ -320,6 +211,7 @@ export default function HCManagementModule({ onBack }: HCManagementModuleProps) 
       </div>
     </div>
   );
+  };
 
   const renderEmployees = () => (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -344,7 +236,11 @@ export default function HCManagementModule({ onBack }: HCManagementModuleProps) 
 
       {/* Mobile Card View */}
       <div className="block lg:hidden divide-y divide-gray-50">
-        {employees.map((emp) => (
+        {employees
+          .filter(emp => selectedSite === "all" || (emp as any).site === selectedSite)
+          .filter(emp => selectedUnit === "all" || (emp as any).unit === selectedUnit)
+          .filter(emp => selectedProject === "all" || (emp as any).project === selectedProject)
+          .map((emp) => (
           <div key={emp.id} className="p-4 flex flex-col gap-4">
              <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -398,7 +294,11 @@ export default function HCManagementModule({ onBack }: HCManagementModuleProps) 
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50 text-xs">
-            {employees.map((emp) => (
+            {employees
+              .filter(emp => selectedSite === "all" || (emp as any).site === selectedSite)
+              .filter(emp => selectedUnit === "all" || (emp as any).unit === selectedUnit)
+              .filter(emp => selectedProject === "all" || (emp as any).project === selectedProject)
+              .map((emp) => (
               <tr key={emp.id} className="hover:bg-gray-50/50 transition-colors group">
                 <td className="px-6 py-5">
                   <div className="flex items-center gap-3">
@@ -575,7 +475,11 @@ export default function HCManagementModule({ onBack }: HCManagementModuleProps) 
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {employees.map((emp) => (
+                  {employees
+                    .filter(emp => selectedSite === "all" || (emp as any).site === selectedSite)
+                    .filter(emp => selectedUnit === "all" || (emp as any).unit === selectedUnit)
+                    .filter(emp => selectedProject === "all" || (emp as any).project === selectedProject)
+                    .map((emp) => (
                     <tr key={emp.id} className="hover:bg-gray-50/30 transition-colors">
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
@@ -628,45 +532,133 @@ export default function HCManagementModule({ onBack }: HCManagementModuleProps) 
     <motion.div 
       initial={{ opacity: 0, scale: 0.98 }} 
       animate={{ opacity: 1, scale: 1 }} 
-      className="space-y-6 sm:space-y-10"
+      className="space-y-6 sm:space-y-10 -mt-2 sm:-mt-4"
     >
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-        <div className="flex items-center gap-4 sm:gap-6">
-          <button 
-            onClick={onBack}
-            className="w-12 h-12 sm:w-14 sm:h-14 bg-white border border-gray-100 rounded-xl sm:rounded-2xl flex items-center justify-center hover:border-black hover:shadow-xl transition-all group shrink-0"
-          >
-            <ArrowLeft className="w-5 sm:w-6 h-5 sm:h-6 text-black group-hover:-translate-x-1 transition-transform" />
-          </button>
-          <div className="flex flex-col">
-            <h1 className="text-xl sm:text-3xl font-black text-black uppercase tracking-tight leading-none">HC Management</h1>
-            <p className="text-[9px] sm:text-xs text-neutral-gray font-bold uppercase tracking-widest mt-2 italic opacity-70">Corporate Governance & Lifecycle</p>
-          </div>
-        </div>
+      <div className="px-1">
+        <div className="flex flex-col gap-3 p-3 bg-white border border-gray-100 rounded-2xl shadow-sm">
+          {/* Row 1: Side-by-Side Filters */}
+          <div className="flex flex-wrap items-center gap-6 px-2 pb-2 border-b border-gray-50">
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest whitespace-nowrap">Time:</span>
+              <div className="flex bg-gray-100 p-0.5 rounded-lg">
+                {(["month", "range", "single"] as const).map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={() => setFilterMode(mode)}
+                    className={`px-2 py-1 rounded-md text-[8px] font-bold uppercase transition-all ${
+                      filterMode === mode ? "bg-white text-black shadow-sm" : "text-neutral-gray hover:text-black"
+                    }`}
+                  >
+                    {mode}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-2">
+                {filterMode === "month" && (
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-neutral-gray pointer-events-none" />
+                    <input 
+                      type="month" 
+                      className="bg-gray-50 border border-gray-100 rounded-xl pl-8 pr-4 py-1.5 text-[10px] font-black uppercase outline-none focus:ring-1 focus:ring-black/10 min-w-[140px]"
+                    />
+                  </div>
+                )}
+                {filterMode === "range" && (
+                  <div className="flex items-center gap-1">
+                    <div className="relative">
+                      <input 
+                        type="date" 
+                        className="bg-gray-50 border border-gray-100 rounded-xl px-3 py-1.5 text-[10px] font-black uppercase outline-none focus:ring-1 focus:ring-black/10 w-[110px]"
+                      />
+                    </div>
+                    <span className="text-[10px] text-neutral-gray">-</span>
+                    <div className="relative">
+                      <input 
+                        type="date" 
+                        className="bg-gray-50 border border-gray-100 rounded-xl px-3 py-1.5 text-[10px] font-black uppercase outline-none focus:ring-1 focus:ring-black/10 w-[110px]"
+                      />
+                    </div>
+                  </div>
+                )}
+                {filterMode === "single" && (
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-3 h-3 text-neutral-gray pointer-events-none" />
+                    <input 
+                      type="date" 
+                      className="bg-gray-50 border border-gray-100 rounded-xl pl-8 pr-4 py-1.5 text-[10px] font-black uppercase outline-none focus:ring-1 focus:ring-black/10 min-w-[140px]"
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
 
-        <nav className="flex items-center p-1 bg-white border border-gray-100 rounded-xl sm:rounded-2xl shadow-sm overflow-x-auto no-scrollbar scrollbar-hide">
-          <div className="flex items-center min-w-max">
-            {[
-              { id: 'overview', label: 'Summary', icon: TrendingUp },
-              { id: 'employees', label: 'Employees', icon: Users },
-              { id: 'user-management', label: 'Identity CRUD', icon: CheckCircle2 },
-              { id: 'attrition', label: 'Analytics', icon: UserMinus },
-            ].map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveView(tab.id)}
-                className={`flex items-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${
-                  activeView === tab.id 
-                    ? 'bg-black text-white shadow-xl shadow-black/20' 
-                    : 'text-neutral-gray hover:bg-gray-50'
-                }`}
+            <div className="h-4 w-px bg-gray-100 hidden lg:block" />
+
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest">Site:</span>
+              <select 
+                value={selectedSite}
+                onChange={(e) => setSelectedSite(e.target.value)}
+                className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-1 focus:ring-black/10 min-w-[140px]"
               >
-                <tab.icon className="w-3.5 h-3.5" />
-                {tab.label}
-              </button>
-            ))}
+                <option value="all">ALL SITES</option>
+                {SITES.map(s => <option key={s} value={s}>{s.toUpperCase()}</option>)}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest">Unit:</span>
+              <select 
+                value={selectedUnit}
+                onChange={(e) => setSelectedUnit(e.target.value)}
+                className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-1 focus:ring-black/10 min-w-[140px]"
+              >
+                <option value="all">ALL UNITS</option>
+                {UNITS.map(u => <option key={u} value={u}>{u.toUpperCase()}</option>)}
+              </select>
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest">Project:</span>
+              <select 
+                value={selectedProject}
+                onChange={(e) => setSelectedProject(e.target.value)}
+                className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-1 focus:ring-black/10 min-w-[160px]"
+              >
+                <option value="all">ALL PROJECTS</option>
+                {PROJECTS.map(p => <option key={p} value={p}>{p.toUpperCase()}</option>)}
+              </select>
+            </div>
+
+            <div className="ml-auto hidden md:block">
+              <p className="text-[9px] font-black text-neutral-gray uppercase tracking-[0.2em] opacity-30">Global HC Filters</p>
+            </div>
           </div>
-        </nav>
+
+          <nav className="flex items-center p-1 overflow-x-auto no-scrollbar scrollbar-hide">
+            <div className="flex items-center min-w-max gap-2">
+              {[
+                { id: 'overview', label: 'Summary', icon: TrendingUp },
+                { id: 'employees', label: 'Employees', icon: Users },
+                { id: 'user-management', label: 'Identity CRUD', icon: CheckCircle2 },
+                { id: 'attrition', label: 'Analytics', icon: UserMinus },
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveView(tab.id)}
+                  className={`flex items-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${
+                    activeView === tab.id 
+                      ? 'bg-black text-white shadow-xl shadow-black/20' 
+                      : 'text-neutral-gray hover:bg-gray-50'
+                  }`}
+                >
+                  <tab.icon className="w-3.5 h-3.5" />
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </nav>
+        </div>
       </div>
 
       <motion.div

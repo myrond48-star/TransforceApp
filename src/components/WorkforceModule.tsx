@@ -55,6 +55,7 @@ const SHIFTS = {
 };
 
 const SITES = ["Jakarta", "Jogja", "Semarang"];
+const UNITS = ["Unit A", "Unit B", "Unit C"];
 const PROJECTS = ["Project Alpha", "Project Beta", "Customer Care", "Technical Support", "VIP Concierge"];
 
 const ACTIVITY_TYPES = {
@@ -76,17 +77,18 @@ const generateIntervals = () => {
 const intervals = generateIntervals();
 
 const mockAgents = [
-  { id: "WF001", name: "Alexander Grant", shift: "S1", team: "Support A", site: "Jakarta", project: "Project Alpha", activities: { 40: "LB", 41: "LB", 42: "LB", 43: "LB", 56: "SB" } },
-  { id: "WF002", name: "Sarah Connor", shift: "H", team: "Support B", site: "Jogja", project: "Customer Care", activities: { 48: "MT", 49: "MT", 56: "LB", 57: "LB", 58: "LB", 59: "LB" } },
-  { id: "WF003", name: "John Wick", shift: "S2", team: "High Priority", site: "Semarang", project: "Technical Support", activities: { 80: "LB", 81: "LB", 82: "LB", 83: "LB" } },
-  { id: "WF004", name: "Ellen Ripley", shift: "S1", team: "Support A", site: "Jakarta", project: "Project Beta", activities: { 48: "TR", 49: "TR", 50: "TR", 51: "TR" } },
-  { id: "WF005", name: "Arthur Dent", shift: "H", team: "Support B", site: "Jogja", project: "VIP Concierge", activities: { 60: "LB", 61: "LB", 62: "LB", 63: "LB" } },
+  { id: "WF001", name: "Alexander Grant", shift: "S1", team: "Support A", site: "Jakarta", unit: "Unit A", project: "Project Alpha", activities: { 40: "LB", 41: "LB", 42: "LB", 43: "LB", 56: "SB" } },
+  { id: "WF002", name: "Sarah Connor", shift: "H", team: "Support B", site: "Jogja", unit: "Unit B", project: "Customer Care", activities: { 48: "MT", 49: "MT", 56: "LB", 57: "LB", 58: "LB", 59: "LB" } },
+  { id: "WF003", name: "John Wick", shift: "S2", team: "High Priority", site: "Semarang", unit: "Unit C", project: "Technical Support", activities: { 80: "LB", 81: "LB", 82: "LB", 83: "LB" } },
+  { id: "WF004", name: "Ellen Ripley", shift: "S1", team: "Support A", site: "Jakarta", unit: "Unit A", project: "Project Beta", activities: { 48: "TR", 49: "TR", 50: "TR", 51: "TR" } },
+  { id: "WF005", name: "Arthur Dent", shift: "H", team: "Support B", site: "Jogja", unit: "Unit B", project: "VIP Concierge", activities: { 60: "LB", 61: "LB", 62: "LB", 63: "LB" } },
   ...Array.from({ length: 35 }).map((_, i) => {
     const shiftOpts = ["S1", "S2", "H"];
     const teamOpts = ["Support A", "Support B", "High Priority", "Technical"];
     const shift = shiftOpts[Math.floor(Math.random() * shiftOpts.length)];
     const team = teamOpts[Math.floor(Math.random() * teamOpts.length)];
     const site = SITES[Math.floor(Math.random() * SITES.length)];
+    const unit = UNITS[Math.floor(Math.random() * UNITS.length)];
     const project = PROJECTS[Math.floor(Math.random() * PROJECTS.length)];
     const id = "WF" + String(i + 6).padStart(3, '0');
     const firsts = ["James", "Maria", "Michael", "Linda", "Robert", "David", "Jessica", "Daniel", "Emily", "Jane", "Alice", "Bob", "Charlie", "Dave", "Eve", "Frank"];
@@ -99,6 +101,7 @@ const mockAgents = [
       shift,
       team,
       site,
+      unit,
       project,
       activities: {
         [(breakStart) % 96]: "LB",
@@ -137,6 +140,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
   const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [selectedTeam, setSelectedTeam] = useState("all");
   const [selectedSite, setSelectedSite] = useState("all");
+  const [selectedUnit, setSelectedUnit] = useState("all");
   const [selectedProject, setSelectedProject] = useState("all");
   const [sortConfig, setSortConfig] = useState<{ key: 'name' | 'interval' | 'activity', direction: 'asc' | 'desc' }>({ key: 'name', direction: 'asc' });
   const [showActions, setShowActions] = useState(false);
@@ -144,6 +148,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
   const renderOverview = () => {
     const filteredCount = mockAgents
       .filter(a => selectedSite === "all" || a.site === selectedSite)
+      .filter(a => selectedUnit === "all" || a.unit === selectedUnit)
       .filter(a => selectedProject === "all" || a.project === selectedProject)
       .length;
 
@@ -252,6 +257,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
       .filter(a => a.name.toLowerCase().includes(searchQuery.toLowerCase()))
       .filter(a => selectedTeam === "all" || a.team === selectedTeam)
       .filter(a => selectedSite === "all" || a.site === selectedSite)
+      .filter(a => selectedUnit === "all" || a.unit === selectedUnit)
       .filter(a => selectedProject === "all" || a.project === selectedProject);
 
     const filteredCount = filteredAgents.length;
@@ -594,6 +600,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
               <tbody className="divide-y divide-gray-50">
                 {mockAgents
                   .filter(a => selectedSite === "all" || a.site === selectedSite)
+                  .filter(a => selectedUnit === "all" || a.unit === selectedUnit)
                   .filter(a => selectedProject === "all" || a.project === selectedProject)
                   .map((agent) => (
                   <tr key={agent.id} className="hover:bg-gray-50/20 transition-colors group">
@@ -705,6 +712,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
               <tbody className="divide-y divide-gray-50">
                 {mockAgents
                   .filter(a => selectedSite === "all" || a.site === selectedSite)
+                  .filter(a => selectedUnit === "all" || a.unit === selectedUnit)
                   .filter(a => selectedProject === "all" || a.project === selectedProject)
                   .map((agent) => {
                   const shift = SHIFTS[agent.shift as keyof typeof SHIFTS];
@@ -989,6 +997,18 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                 {SITES.map(s => <option key={s} value={s}>{s.toUpperCase()}</option>)}
               </select>
             </div>
+
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest">Unit:</span>
+              <select 
+                value={selectedUnit}
+                onChange={(e) => setSelectedUnit(e.target.value)}
+                className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-1 focus:ring-black/10 min-w-[140px]"
+              >
+                <option value="all">ALL UNITS</option>
+                {UNITS.map(u => <option key={u} value={u}>{u.toUpperCase()}</option>)}
+              </select>
+            </div>
             
             <div className="flex items-center gap-3">
               <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest">Project:</span>
@@ -1100,7 +1120,11 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-50">
-                        {mockAgents.map((agent) => {
+                        {mockAgents
+                          .filter(a => selectedSite === "all" || a.site === selectedSite)
+                          .filter(a => selectedUnit === "all" || a.unit === selectedUnit)
+                          .filter(a => selectedProject === "all" || a.project === selectedProject)
+                          .map((agent) => {
                           const shift = SHIFTS[agent.shift as keyof typeof SHIFTS];
                           const startPct = (timeToIndex(shift.start) / 96) * 100;
                           const endPct = (timeToIndex(shift.end) / 96) * 100;
