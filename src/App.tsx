@@ -7,6 +7,7 @@ import PLAnalysisModule from "./components/PLAnalysisModule.tsx";
 import AboutModule from "./components/AboutModule.tsx";
 import KPITrackerModule from "./components/KPITrackerModule.tsx";
 import FacilityTrackerModule from "./components/FacilityTrackerModule.tsx";
+import SupportModule from "./components/SupportModule.tsx";
 import { Settings as SettingsModule } from "./components/Settings.tsx";
 import { 
   Users, 
@@ -293,7 +294,7 @@ export default function App() {
                   key={idx}
                   variants={itemVariants}
                   onClick={() => {
-                    const allowed = ["Workforce", "HC Management", "PL Analysis", "KPI Tracker", "Facility Tracker", "ID Creation & Deletion"];
+                    const allowed = ["Workforce", "HC Management", "PL Analysis", "KPI Tracker", "Facility Tracker", "ID Creation & Deletion", "Support"];
                     if (allowed.includes(category.title)) {
                       if (category.title === "ID Creation & Deletion") {
                         setSettingsModule("security");
@@ -306,7 +307,7 @@ export default function App() {
                     }
                   }}
                   className={`group bg-white rounded-2xl border border-gray-100 overflow-hidden hover:border-active-red/20 hover:shadow-[0_20px_50px_rgba(0,0,0,0.06)] transition-all duration-500 flex flex-col relative cursor-pointer ${
-                    !(["Workforce", "HC Management", "PL Analysis", "KPI Tracker", "Facility Tracker", "ID Creation & Deletion"].includes(category.title)) ? 'opacity-60 grayscale' : ''
+                    !(["Workforce", "HC Management", "PL Analysis", "KPI Tracker", "Facility Tracker", "ID Creation & Deletion", "Support"].includes(category.title)) ? 'opacity-60 grayscale' : ''
                   }`}
                   id={`category-${idx}`}
                 >
@@ -352,6 +353,7 @@ export default function App() {
               {activeModule === "PL Analysis" && <PLAnalysisModule onBack={() => setActiveModule(null)} />}
               {activeModule === "KPI Tracker" && <KPITrackerModule onBack={() => setActiveModule(null)} />}
               {activeModule === "Facility Tracker" && <FacilityTrackerModule onBack={() => setActiveModule(null)} />}
+              {activeModule === "Support" && <SupportModule onBack={() => setActiveModule(null)} />}
             </motion.div>
           )}
         </AnimatePresence>
