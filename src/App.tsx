@@ -24,7 +24,8 @@ import {
   Bell,
   Menu,
   X,
-  LogOut
+  LogOut,
+  Home
 } from "lucide-react";
 
 interface Category {
@@ -133,6 +134,13 @@ export default function App() {
 
   const NavLinks = () => (
     <>
+      <button 
+        onClick={() => { setActiveTab("dashboard"); setActiveModule(null); setIsMobileMenuOpen(false); }}
+        className={`flex items-center pb-1 transition-all ${activeTab === "dashboard" && !activeModule ? "text-black lg:border-b-2 lg:border-active-red" : "text-neutral-gray hover:text-black"}`}
+        title="Home"
+      >
+        <Home className="w-4 h-4" />
+      </button>
       <button 
         onClick={() => { setActiveTab("dashboard"); setActiveModule(null); setIsMobileMenuOpen(false); }}
         className={`text-xs font-bold uppercase tracking-widest pb-1 transition-all text-left lg:text-center ${activeTab === "dashboard" ? "text-black lg:border-b-2 lg:border-active-red" : "text-neutral-gray hover:text-black"}`}
