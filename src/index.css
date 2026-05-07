@@ -10,6 +10,13 @@
   --color-neutral-gray: #888888;
   --color-black: #000000;
   
+  /* Secondary Color Scheme */
+  --color-secondary-dark-red: #9B0F1A; /* Approximate from image */
+  --color-secondary-red: #DC3B44; 
+  --color-secondary-cream: #FFF2CC;
+  --color-secondary-teal: #26A891;
+  --color-secondary-light-teal: #6DC5B6;
+
   --color-brand: var(--color-active-red);
 }
 

@@ -266,7 +266,7 @@ export default function App() {
       </AnimatePresence>
 
       {/* Main Content */}
-      <main className="flex-grow max-w-7xl mx-auto w-full px-4 sm:px-6 py-10 lg:py-14">
+      <main className="flex-grow max-w-7xl mx-auto w-full px-4 sm:px-6 pt-6 pb-10 lg:pt-8 lg:pb-14">
         <AnimatePresence mode="wait">
           {activeTab === "about" ? (
             <AboutModule onBack={() => setActiveTab("dashboard")} />

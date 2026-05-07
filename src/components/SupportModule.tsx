@@ -82,7 +82,7 @@ function SupportDashboardView() {
     automation: { 
       title: "New Automation Ticket", 
       subtitle: "Submit a process for automation", 
-      color: "bg-black", 
+      color: "bg-active-red text-white", 
       descLabel: "Process Description",
       fields: [
         { label: "Platform", options: ["RPA", "CUSTOM SCRIPT", "INTEGRATION / API", "AI BOT"] },
@@ -93,7 +93,7 @@ function SupportDashboardView() {
     training: { 
       title: "New Training Request", 
       subtitle: "Submit educational needs", 
-      color: "bg-emerald-600", 
+      color: "bg-secondary-teal text-white", 
       descLabel: "Session Goals",
       fields: [
         { label: "Category", options: ["ONBOARDING", "REFRESHMENT", "SOFT SKILLS", "TECHNICAL TOOLS"] },
@@ -104,7 +104,7 @@ function SupportDashboardView() {
     presale: { 
       title: "Presale Capacity Request", 
       subtitle: "Calculate resource needs", 
-      color: "bg-blue-600", 
+      color: "bg-secondary-cream text-black", 
       descLabel: "Project Scope",
       fields: [
         { label: "Project Type", options: ["IMPLEMENTATION", "MIGRATION", "CONSULTATION", "POC / PILOT"] },
@@ -115,7 +115,7 @@ function SupportDashboardView() {
     aftersales: { 
       title: "Aftersales Capacity Request", 
       subtitle: "Monitor ongoing workload", 
-      color: "bg-orange-600", 
+      color: "bg-secondary-red text-white", 
       descLabel: "Support Requirements",
       fields: [
         { label: "Support Level", options: ["TIER 1 (BASIC)", "TIER 2 (TECHNICAL)", "TIER 3 (EXPERT)"] },
@@ -128,10 +128,10 @@ function SupportDashboardView() {
   const current = config[ticketCategory] || config.automation;
 
   const allRequests = [
-    ...INITIAL_REQUESTS.map(req => ({ ...req, type: 'Automation', categoryColor: 'bg-red-50 text-active-red' })),
-    ...INITIAL_TRAINING_REQUESTS.map(req => ({ ...req, type: 'Training', categoryColor: 'bg-emerald-50 text-emerald-600' })),
-    ...INITIAL_PRESALE_REQUESTS.map(req => ({ ...req, type: 'Presale', categoryColor: 'bg-blue-50 text-blue-600' })),
-    ...INITIAL_AFTERSALES_REQUESTS.map(req => ({ ...req, type: 'Aftersales', categoryColor: 'bg-orange-50 text-orange-600' }))
+    ...INITIAL_REQUESTS.map(req => ({ ...req, type: 'Automation', categoryColor: 'bg-active-red/10 text-active-red' })),
+    ...INITIAL_TRAINING_REQUESTS.map(req => ({ ...req, type: 'Training', categoryColor: 'bg-secondary-teal/10 text-secondary-teal' })),
+    ...INITIAL_PRESALE_REQUESTS.map(req => ({ ...req, type: 'Presale', categoryColor: 'bg-secondary-cream border border-[#eeddae] text-black' })),
+    ...INITIAL_AFTERSALES_REQUESTS.map(req => ({ ...req, type: 'Aftersales', categoryColor: 'bg-secondary-red/10 text-secondary-red' }))
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -152,8 +152,8 @@ function SupportDashboardView() {
       <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
         <div className={`${current.color} p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors`}>
           <div>
-            <h2 className="text-lg font-black text-white uppercase tracking-tight">{current.title}</h2>
-            <p className="text-[10px] text-white/60 font-bold uppercase tracking-widest mt-1">{current.subtitle}</p>
+            <h2 className="text-lg font-black uppercase tracking-tight">{current.title}</h2>
+            <p className="text-[10px] font-bold uppercase tracking-widest mt-1 opacity-60">{current.subtitle}</p>
           </div>
         </div>
 
@@ -217,7 +217,7 @@ function SupportDashboardView() {
 
           <div className="flex items-center gap-4 pt-4 border-t border-gray-50">
             <button 
-              className={`px-8 py-4 ${current.color} text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all shadow-lg shadow-black/10 font-sans ml-auto`}
+              className={`px-8 py-4 ${current.color} rounded-2xl text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all shadow-lg shadow-black/10 font-sans ml-auto`}
             >
               Submit Request
             </button>
@@ -277,8 +277,8 @@ function SupportDashboardView() {
                   </td>
                   <td className="px-6 py-5">
                     <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest
-                      ${req.status === 'Completed' ? 'bg-emerald-50 text-emerald-600' : 
-                        req.status === 'In Progress' ? 'bg-blue-50 text-blue-600' : 'bg-orange-50 text-orange-600'}
+                      ${req.status === 'Completed' ? 'bg-secondary-teal/10 text-secondary-teal' : 
+                        req.status === 'In Progress' ? 'bg-secondary-cream border border-[#eeddae] text-black' : 'bg-secondary-red/10 text-secondary-red'}
                     `}>
                       {req.status === 'Completed' ? <CheckCircle2 className="w-3 h-3" /> : 
                        req.status === 'In Progress' ? <Clock className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
@@ -319,7 +319,7 @@ function AutomationRequestView() {
               </div>
               <div className="text-right">
                 <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest block">Workload</span>
-                <span className={`text-sm font-bold ${pic.workload > 80 ? 'text-active-red' : 'text-emerald-600'}`}>
+                <span className={`text-sm font-bold ${pic.workload > 80 ? 'text-active-red' : 'text-secondary-teal'}`}>
                   {pic.workload}%
                 </span>
               </div>
@@ -334,7 +334,7 @@ function AutomationRequestView() {
               </div>
               <div className="h-1 w-16 bg-gray-100 rounded-full overflow-hidden">
                 <div 
-                  className={`h-full rounded-full ${pic.workload > 80 ? 'bg-active-red' : 'bg-emerald-500'}`} 
+                  className={`h-full rounded-full ${pic.workload > 80 ? 'bg-active-red' : 'bg-secondary-teal'}`} 
                   style={{ width: `${pic.workload}%` }} 
                 />
               </div>
@@ -404,8 +404,8 @@ function AutomationRequestView() {
                   </td>
                   <td className="px-6 py-5">
                     <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest
-                      ${req.status === 'Completed' ? 'bg-emerald-50 text-emerald-600' : 
-                        req.status === 'In Progress' ? 'bg-blue-50 text-blue-600' : 'bg-orange-50 text-orange-600'}
+                      ${req.status === 'Completed' ? 'bg-secondary-teal/10 text-secondary-teal' : 
+                        req.status === 'In Progress' ? 'bg-secondary-cream border border-[#eeddae] text-black' : 'bg-secondary-red/10 text-secondary-red'}
                     `}>
                       {req.status === 'Completed' ? <CheckCircle2 className="w-3 h-3" /> : 
                        req.status === 'In Progress' ? <Clock className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
@@ -415,7 +415,7 @@ function AutomationRequestView() {
                   <td className="px-6 py-5">
                     <span className={`text-[9px] font-black uppercase tracking-widest 
                       ${req.priority === 'High' ? 'text-active-red' : 
-                        req.priority === 'Medium' ? 'text-orange-500' : 'text-neutral-gray'}
+                        req.priority === 'Medium' ? 'text-secondary-red' : 'text-neutral-gray'}
                     `}>
                       {req.priority}
                     </span>
@@ -479,8 +479,8 @@ function TrainingRequestView() {
                 <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest">{pic.tasks} Assigned Sessions</span>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-[8px] font-black text-emerald-600 uppercase tracking-widest">Active</span>
+                <div className="w-1.5 h-1.5 rounded-full bg-secondary-teal animate-pulse" />
+                <span className="text-[8px] font-black text-secondary-teal uppercase tracking-widest">Active</span>
               </div>
             </div>
           </div>
@@ -528,7 +528,7 @@ function TrainingRequestView() {
                 <tr key={req.id} className="hover:bg-gray-50/50 transition-colors group">
                   <td className="px-6 py-5">
                     <div className="flex flex-col">
-                      <span className="text-[10px] font-black text-emerald-600 tracking-widest mb-1">{req.id}</span>
+                      <span className="text-[10px] font-black text-secondary-teal tracking-widest mb-1">{req.id}</span>
                       <span className="text-xs font-bold text-black uppercase tracking-tight">{req.title}</span>
                     </div>
                   </td>
@@ -540,7 +540,7 @@ function TrainingRequestView() {
                   </td>
                   <td className="px-6 py-5">
                     <div className="flex items-center gap-2">
-                      <div className="w-6 h-6 rounded-lg bg-emerald-50 flex items-center justify-center text-[10px] font-bold text-emerald-700">
+                      <div className="w-6 h-6 rounded-lg bg-secondary-teal/10 flex items-center justify-center text-[10px] font-bold text-secondary-teal">
                         {req.pic.charAt(0)}
                       </div>
                       <span className="text-xs font-bold text-black uppercase tracking-tight">{req.pic}</span>
@@ -548,8 +548,8 @@ function TrainingRequestView() {
                   </td>
                   <td className="px-6 py-5">
                     <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest
-                      ${req.status === 'Completed' ? 'bg-emerald-50 text-emerald-600' : 
-                        req.status === 'In Progress' ? 'bg-blue-50 text-blue-600' : 'bg-orange-50 text-orange-600'}
+                      ${req.status === 'Completed' ? 'bg-secondary-teal/10 text-secondary-teal' : 
+                        req.status === 'In Progress' ? 'bg-secondary-cream border border-[#eeddae] text-black' : 'bg-secondary-red/10 text-secondary-red'}
                     `}>
                       {req.status === 'Completed' ? <CheckCircle2 className="w-3 h-3" /> : 
                        req.status === 'In Progress' ? <Clock className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
@@ -559,7 +559,7 @@ function TrainingRequestView() {
                   <td className="px-6 py-5">
                     <span className={`text-[9px] font-black uppercase tracking-widest 
                       ${req.priority === 'High' ? 'text-active-red' : 
-                        req.priority === 'Medium' ? 'text-orange-500' : 'text-neutral-gray'}
+                        req.priority === 'Medium' ? 'text-secondary-red' : 'text-neutral-gray'}
                     `}>
                       {req.priority}
                     </span>
@@ -597,7 +597,7 @@ function PresaleRequestView() {
               </div>
               <div className="text-right">
                 <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest block">Workload</span>
-                <span className={`text-sm font-bold ${pic.workload > 80 ? 'text-active-red' : 'text-blue-600'}`}>
+                <span className={`text-sm font-bold ${pic.workload > 80 ? 'text-active-red' : 'text-black'}`}>
                   {pic.workload}%
                 </span>
               </div>
@@ -612,7 +612,7 @@ function PresaleRequestView() {
               </div>
               <div className="h-1 w-16 bg-gray-100 rounded-full overflow-hidden">
                  <div 
-                  className={`h-full rounded-full ${pic.workload > 80 ? 'bg-active-red' : 'bg-blue-500'}`} 
+                  className={`h-full rounded-full ${pic.workload > 80 ? 'bg-active-red' : 'bg-secondary-cream'}`} 
                   style={{ width: `${pic.workload}%` }} 
                 />
               </div>
@@ -661,7 +661,7 @@ function PresaleRequestView() {
                 <tr key={req.id} className="hover:bg-gray-50/50 transition-colors group">
                   <td className="px-6 py-5">
                     <div className="flex flex-col">
-                      <span className="text-[10px] font-black text-blue-600 tracking-widest mb-1">{req.id}</span>
+                      <span className="text-[10px] font-black text-black tracking-widest mb-1">{req.id}</span>
                       <span className="text-xs font-bold text-black uppercase tracking-tight">{req.title}</span>
                     </div>
                   </td>
@@ -673,7 +673,7 @@ function PresaleRequestView() {
                   </td>
                   <td className="px-6 py-5">
                     <div className="flex items-center gap-2">
-                       <div className="w-6 h-6 rounded-lg bg-blue-50 flex items-center justify-center text-[10px] font-bold text-blue-700">
+                       <div className="w-6 h-6 rounded-lg bg-secondary-cream flex items-center justify-center text-[10px] font-bold text-black">
                         {req.pic.charAt(0)}
                       </div>
                       <span className="text-xs font-bold text-black uppercase tracking-tight">{req.pic}</span>
@@ -681,8 +681,8 @@ function PresaleRequestView() {
                   </td>
                   <td className="px-6 py-5">
                     <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest
-                      ${req.status === 'Completed' ? 'bg-emerald-50 text-emerald-600' : 
-                        req.status === 'In Progress' ? 'bg-blue-50 text-blue-600' : 'bg-orange-50 text-orange-600'}
+                      ${req.status === 'Completed' ? 'bg-secondary-teal/10 text-secondary-teal' : 
+                        req.status === 'In Progress' ? 'bg-secondary-cream border border-[#eeddae] text-black' : 'bg-secondary-red/10 text-secondary-red'}
                     `}>
                       {req.status === 'Completed' ? <CheckCircle2 className="w-3 h-3" /> : 
                        req.status === 'In Progress' ? <Clock className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
@@ -692,7 +692,7 @@ function PresaleRequestView() {
                   <td className="px-6 py-5">
                     <span className={`text-[9px] font-black uppercase tracking-widest 
                       ${req.priority === 'High' ? 'text-active-red' : 
-                        req.priority === 'Medium' ? 'text-orange-500' : 'text-neutral-gray'}
+                        req.priority === 'Medium' ? 'text-secondary-red' : 'text-neutral-gray'}
                     `}>
                       {req.priority}
                     </span>
@@ -730,7 +730,7 @@ function AftersalesRequestView() {
               </div>
               <div className="text-right">
                 <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest block">Workload</span>
-                <span className={`text-sm font-bold ${pic.workload > 80 ? 'text-active-red' : 'text-orange-600'}`}>
+                <span className={`text-sm font-bold ${pic.workload > 80 ? 'text-active-red' : 'text-secondary-red'}`}>
                   {pic.workload}%
                 </span>
               </div>
@@ -745,7 +745,7 @@ function AftersalesRequestView() {
               </div>
               <div className="h-1 w-16 bg-gray-100 rounded-full overflow-hidden">
                  <div 
-                  className={`h-full rounded-full ${pic.workload > 80 ? 'bg-active-red' : 'bg-orange-500'}`} 
+                  className={`h-full rounded-full ${pic.workload > 80 ? 'bg-active-red' : 'bg-secondary-red'}`} 
                   style={{ width: `${pic.workload}%` }} 
                 />
               </div>
@@ -794,7 +794,7 @@ function AftersalesRequestView() {
                 <tr key={req.id} className="hover:bg-gray-50/50 transition-colors group">
                   <td className="px-6 py-5">
                     <div className="flex flex-col">
-                      <span className="text-[10px] font-black text-orange-600 tracking-widest mb-1">{req.id}</span>
+                      <span className="text-[10px] font-black text-secondary-red tracking-widest mb-1">{req.id}</span>
                       <span className="text-xs font-bold text-black uppercase tracking-tight">{req.title}</span>
                     </div>
                   </td>
@@ -806,7 +806,7 @@ function AftersalesRequestView() {
                   </td>
                   <td className="px-6 py-5">
                     <div className="flex items-center gap-2">
-                       <div className="w-6 h-6 rounded-lg bg-orange-50 flex items-center justify-center text-[10px] font-bold text-orange-700">
+                       <div className="w-6 h-6 rounded-lg bg-secondary-red/10 flex items-center justify-center text-[10px] font-bold text-secondary-red">
                         {req.pic.charAt(0)}
                       </div>
                       <span className="text-xs font-bold text-black uppercase tracking-tight">{req.pic}</span>
@@ -814,8 +814,8 @@ function AftersalesRequestView() {
                   </td>
                   <td className="px-6 py-5">
                     <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest
-                      ${req.status === 'Completed' ? 'bg-emerald-50 text-emerald-600' : 
-                        req.status === 'In Progress' ? 'bg-blue-50 text-blue-600' : 'bg-orange-50 text-orange-600'}
+                      ${req.status === 'Completed' ? 'bg-secondary-teal/10 text-secondary-teal' : 
+                        req.status === 'In Progress' ? 'bg-secondary-cream border border-[#eeddae] text-black' : 'bg-secondary-red/10 text-secondary-red'}
                     `}>
                       {req.status === 'Completed' ? <CheckCircle2 className="w-3 h-3" /> : 
                        req.status === 'In Progress' ? <Clock className="w-3 h-3" /> : <AlertCircle className="w-3 h-3" />}
@@ -826,7 +826,7 @@ function AftersalesRequestView() {
                     <span className={`text-[9px] font-black uppercase tracking-widest 
                       ${req.priority === 'Urgent' ? 'text-active-red' :
                         req.priority === 'High' ? 'text-active-red' : 
-                        req.priority === 'Medium' ? 'text-orange-500' : 'text-neutral-gray'}
+                        req.priority === 'Medium' ? 'text-secondary-red' : 'text-neutral-gray'}
                     `}>
                       {req.priority}
                     </span>
@@ -846,10 +846,10 @@ function AftersalesRequestView() {
 
 function AdminAssignmentView() {
   const allRequests = [
-    ...INITIAL_REQUESTS.map(req => ({ ...req, type: 'Automation', categoryColor: 'bg-red-50 text-active-red' })),
-    ...INITIAL_TRAINING_REQUESTS.map(req => ({ ...req, type: 'Training', categoryColor: 'bg-emerald-50 text-emerald-600' })),
-    ...INITIAL_PRESALE_REQUESTS.map(req => ({ ...req, type: 'Presale', categoryColor: 'bg-blue-50 text-blue-600' })),
-    ...INITIAL_AFTERSALES_REQUESTS.map(req => ({ ...req, type: 'Aftersales', categoryColor: 'bg-orange-50 text-orange-600' }))
+    ...INITIAL_REQUESTS.map(req => ({ ...req, type: 'Automation', categoryColor: 'bg-active-red/10 text-active-red' })),
+    ...INITIAL_TRAINING_REQUESTS.map(req => ({ ...req, type: 'Training', categoryColor: 'bg-secondary-teal/10 text-secondary-teal' })),
+    ...INITIAL_PRESALE_REQUESTS.map(req => ({ ...req, type: 'Presale', categoryColor: 'bg-secondary-cream border border-[#eeddae] text-black' })),
+    ...INITIAL_AFTERSALES_REQUESTS.map(req => ({ ...req, type: 'Aftersales', categoryColor: 'bg-secondary-red/10 text-secondary-red' }))
   ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const ALL_PICS = [

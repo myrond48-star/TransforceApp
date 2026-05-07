@@ -25,7 +25,8 @@ import {
   ChevronDown,
   MoreHorizontal,
   UserCheck,
-  UserCircle
+  UserCircle,
+  LayoutDashboard
 } from "lucide-react";
 import { 
   XAxis, 
@@ -53,6 +54,9 @@ const SHIFTS = {
   "H": { label: "Day", start: "08:00", end: "17:00", color: "bg-emerald-500" },
 };
 
+const SITES = ["Jakarta", "Jogja", "Semarang"];
+const PROJECTS = ["Project Alpha", "Project Beta", "Customer Care", "Technical Support", "VIP Concierge"];
+
 const ACTIVITY_TYPES = {
   "LB": { label: "Lunch Break", color: "bg-active-red" },
   "SB": { label: "Short Break", color: "bg-amber-400" },
@@ -72,16 +76,18 @@ const generateIntervals = () => {
 const intervals = generateIntervals();
 
 const mockAgents = [
-  { id: "WF001", name: "Alexander Grant", shift: "S1", team: "Support A", activities: { 40: "LB", 41: "LB", 42: "LB", 43: "LB", 56: "SB" } },
-  { id: "WF002", name: "Sarah Connor", shift: "H", team: "Support B", activities: { 48: "MT", 49: "MT", 56: "LB", 57: "LB", 58: "LB", 59: "LB" } },
-  { id: "WF003", name: "John Wick", shift: "S2", team: "High Priority", activities: { 80: "LB", 81: "LB", 82: "LB", 83: "LB" } },
-  { id: "WF004", name: "Ellen Ripley", shift: "S1", team: "Support A", activities: { 48: "TR", 49: "TR", 50: "TR", 51: "TR" } },
-  { id: "WF005", name: "Arthur Dent", shift: "H", team: "Support B", activities: { 60: "LB", 61: "LB", 62: "LB", 63: "LB" } },
+  { id: "WF001", name: "Alexander Grant", shift: "S1", team: "Support A", site: "Jakarta", project: "Project Alpha", activities: { 40: "LB", 41: "LB", 42: "LB", 43: "LB", 56: "SB" } },
+  { id: "WF002", name: "Sarah Connor", shift: "H", team: "Support B", site: "Jogja", project: "Customer Care", activities: { 48: "MT", 49: "MT", 56: "LB", 57: "LB", 58: "LB", 59: "LB" } },
+  { id: "WF003", name: "John Wick", shift: "S2", team: "High Priority", site: "Semarang", project: "Technical Support", activities: { 80: "LB", 81: "LB", 82: "LB", 83: "LB" } },
+  { id: "WF004", name: "Ellen Ripley", shift: "S1", team: "Support A", site: "Jakarta", project: "Project Beta", activities: { 48: "TR", 49: "TR", 50: "TR", 51: "TR" } },
+  { id: "WF005", name: "Arthur Dent", shift: "H", team: "Support B", site: "Jogja", project: "VIP Concierge", activities: { 60: "LB", 61: "LB", 62: "LB", 63: "LB" } },
   ...Array.from({ length: 35 }).map((_, i) => {
     const shiftOpts = ["S1", "S2", "H"];
     const teamOpts = ["Support A", "Support B", "High Priority", "Technical"];
     const shift = shiftOpts[Math.floor(Math.random() * shiftOpts.length)];
     const team = teamOpts[Math.floor(Math.random() * teamOpts.length)];
+    const site = SITES[Math.floor(Math.random() * SITES.length)];
+    const project = PROJECTS[Math.floor(Math.random() * PROJECTS.length)];
     const id = "WF" + String(i + 6).padStart(3, '0');
     const firsts = ["James", "Maria", "Michael", "Linda", "Robert", "David", "Jessica", "Daniel", "Emily", "Jane", "Alice", "Bob", "Charlie", "Dave", "Eve", "Frank"];
     const lasts = ["Smith", "Johnson", "Williams", "Jones", "Brown", "Davis", "Miller", "Wilson", "Moore", "Taylor", "Anderson", "Thomas", "Jackson", "White", "Harris", "Martin"];
@@ -92,6 +98,8 @@ const mockAgents = [
       name,
       shift,
       team,
+      site,
+      project,
       activities: {
         [(breakStart) % 96]: "LB",
         [(breakStart + 1) % 96]: "LB",
@@ -124,12 +132,113 @@ const reqData = Array.from({ length: 96 }).map((_, i) => {
 // --- Main Component ---
 
 export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
-  const [activeTab, setActiveTab] = useState("schedule");
+  const [activeTab, setActiveTab] = useState("overview");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [selectedTeam, setSelectedTeam] = useState("all");
+  const [selectedSite, setSelectedSite] = useState("all");
+  const [selectedProject, setSelectedProject] = useState("all");
   const [sortConfig, setSortConfig] = useState<{ key: 'name' | 'interval' | 'activity', direction: 'asc' | 'desc' }>({ key: 'name', direction: 'asc' });
   const [showActions, setShowActions] = useState(false);
+
+  const renderOverview = () => {
+    const filteredCount = mockAgents
+      .filter(a => selectedSite === "all" || a.site === selectedSite)
+      .filter(a => selectedProject === "all" || a.project === selectedProject)
+      .length;
+
+    return (
+      <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-500">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[
+            { label: "Overall Adherence", value: "94.8%", trend: "+2.1%", icon: CheckCircle2, color: "text-green-600" },
+            { label: "Current Service Level", value: "88.2%", trend: "-1.5%", icon: Zap, color: "text-active-red" },
+            { label: "Total Headcount", value: String(filteredCount), trend: filteredCount > 20 ? "+12" : "0", icon: Users, color: "text-black" },
+            { label: "Resource Gap", value: "-04", trend: "Critical", icon: AlertCircle, color: "text-active-red" },
+          ].map((stat, i) => (
+            <div key={i} className="bg-white p-6 rounded-[24px] border border-gray-100 shadow-sm flex items-center justify-between group hover:border-black transition-all">
+              <div>
+                <p className="text-[10px] sm:text-[11px] font-black text-neutral-gray uppercase tracking-widest mb-2">{stat.label}</p>
+                <p className="text-3xl sm:text-4xl font-black text-black tracking-tighter">{stat.value}</p>
+                <p className={`text-[10px] font-black uppercase tracking-widest mt-2 ${stat.trend.startsWith('+') ? 'text-green-600' : 'text-active-red'}`}>
+                  {stat.trend} <span className="text-gray-300 font-bold hidden xs:inline uppercase tracking-widest">vs target</span>
+                </p>
+              </div>
+              <div className="p-4 bg-gray-50 rounded-2xl group-hover:scale-110 transition-transform">
+                <stat.icon className={`w-8 h-8 ${stat.color} stroke-[1.5]`} />
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col p-6 sm:p-8">
+           <div className="flex flex-col md:flex-row justify-between gap-4 mb-8">
+             <div>
+               <h3 className="text-xl sm:text-2xl font-black text-black tracking-tight uppercase">Performance Overview</h3>
+               <p className="text-neutral-gray text-[10px] font-bold uppercase tracking-[0.2em] mt-2">Daily Service Level & Demand Dynamics</p>
+             </div>
+           </div>
+           <div className="h-[400px] w-full">
+             <ResponsiveContainer width="100%" height="100%">
+               <ComposedChart data={reqData} margin={{ top: 20, right: 0, left: -20, bottom: 0 }}>
+                 <defs>
+                   <linearGradient id="colorStaffed" x1="0" y1="0" x2="0" y2="1">
+                     <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
+                     <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                   </linearGradient>
+                 </defs>
+                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                 <XAxis 
+                   dataKey="time" 
+                   axisLine={false} 
+                   tickLine={false} 
+                   tick={{ fontSize: 10, fontWeight: 900, fill: '#64748b' }} 
+                   interval={7} 
+                   dy={15}
+                 />
+                 <YAxis 
+                   axisLine={false} 
+                   tickLine={false} 
+                   tick={{ fontSize: 10, fontWeight: 900, fill: '#64748b' }} 
+                   dx={-10}
+                 />
+                 <Tooltip 
+                   contentStyle={{ 
+                     borderRadius: '24px', 
+                     border: '1px solid #e2e8f0', 
+                     padding: '24px', 
+                     boxShadow: '0 25px 50px -12px rgba(0,0,0,0.15)',
+                     backgroundColor: 'rgba(255,255,255,0.98)',
+                   }}
+                   itemStyle={{ textTransform: 'uppercase', fontWeight: '900', fontSize: '11px', padding: '6px 0' }}
+                   cursor={{ stroke: '#cbd5e1', strokeWidth: 1 }}
+                 />
+                 <Line 
+                   type="monotone" 
+                   dataKey="req" 
+                   name="Demand Threshold" 
+                   stroke="#6366f1" 
+                   strokeWidth={2} 
+                   dot={false}
+                   activeDot={false}
+                 />
+                 <Area 
+                   type="monotone" 
+                   dataKey="actual" 
+                   name="Staffed Resources" 
+                   stroke="#10b981" 
+                   strokeWidth={4} 
+                   fillOpacity={1} 
+                   fill="url(#colorStaffed)" 
+                   activeDot={{ r: 8, strokeWidth: 4, stroke: '#fff', fill: '#10b981' }}
+                 />
+               </ComposedChart>
+             </ResponsiveContainer>
+           </div>
+        </div>
+      </div>
+    );
+  };
 
   const timeToIndex = (timeStr: string) => {
     const [h, m] = timeStr.split(":").map(Number);
@@ -142,18 +251,23 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
     const filteredAgents = mockAgents
       .filter(a => a.name.toLowerCase().includes(searchQuery.toLowerCase()))
       .filter(a => selectedTeam === "all" || a.team === selectedTeam)
-      .sort((a, b) => {
-        if (sortConfig.key === 'name') {
-          return sortConfig.direction === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
-        }
-        if (sortConfig.key === 'interval') {
-          const shiftA = SHIFTS[a.shift as keyof typeof SHIFTS].start;
-          const shiftB = SHIFTS[b.shift as keyof typeof SHIFTS].start;
-          return sortConfig.direction === 'asc' ? shiftA.localeCompare(shiftB) : shiftB.localeCompare(shiftA);
-        }
-        // Simplified activity sort (just by presence of initial activity)
-        return 0;
-      });
+      .filter(a => selectedSite === "all" || a.site === selectedSite)
+      .filter(a => selectedProject === "all" || a.project === selectedProject);
+
+    const filteredCount = filteredAgents.length;
+
+    // Separate sorting logic
+    const sortedAgents = [...filteredAgents].sort((a, b) => {
+      if (sortConfig.key === 'name') {
+        return sortConfig.direction === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
+      }
+      if (sortConfig.key === 'interval') {
+        const shiftA = SHIFTS[a.shift as keyof typeof SHIFTS].start;
+        const shiftB = SHIFTS[b.shift as keyof typeof SHIFTS].start;
+        return sortConfig.direction === 'asc' ? shiftA.localeCompare(shiftB) : shiftB.localeCompare(shiftA);
+      }
+      return 0;
+    });
 
     return (
       <div className="space-y-6 sm:space-y-8">
@@ -162,7 +276,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
           {[
             { label: "Overall Adherence", value: "94.8%", trend: "+2.1%", icon: CheckCircle2, color: "text-green-600" },
             { label: "Current Service Level", value: "88.2%", trend: "-1.5%", icon: Zap, color: "text-active-red" },
-            { label: "Total Headcount", value: "412", trend: "+12", icon: Users, color: "text-black" },
+            { label: "Total Headcount", value: String(filteredCount), trend: filteredCount > 20 ? "+12" : "0", icon: Users, color: "text-black" },
             { label: "Resource Gap", value: "-04", trend: "Critical", icon: AlertCircle, color: "text-active-red" },
           ].map((stat, i) => (
             <div key={i} className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between">
@@ -324,7 +438,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filteredAgents.map((agent, idx) => {
+              {sortedAgents.map((agent, idx) => {
                 const shift = SHIFTS[agent.shift as keyof typeof SHIFTS];
                 const startIdx = timeToIndex(shift.start);
                 const endIdx = timeToIndex(shift.end);
@@ -478,7 +592,10 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {mockAgents.map((agent) => (
+                {mockAgents
+                  .filter(a => selectedSite === "all" || a.site === selectedSite)
+                  .filter(a => selectedProject === "all" || a.project === selectedProject)
+                  .map((agent) => (
                   <tr key={agent.id} className="hover:bg-gray-50/20 transition-colors group">
                     <td className="sticky left-0 z-40 bg-white group-hover:bg-gray-50/80 border-r border-gray-200 px-4 sm:px-6 py-3 transition-colors">
                       <div className="flex flex-col">
@@ -586,7 +703,10 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {mockAgents.map((agent) => {
+                {mockAgents
+                  .filter(a => selectedSite === "all" || a.site === selectedSite)
+                  .filter(a => selectedProject === "all" || a.project === selectedProject)
+                  .map((agent) => {
                   const shift = SHIFTS[agent.shift as keyof typeof SHIFTS];
                   const isLate = Math.random() > 0.8;
                   const checkIn = isLate ? `${shift.start.split(":")[0]}:0${Math.floor(Math.random() * 9) + 5}` : shift.start;
@@ -852,45 +972,69 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
   };
 
   return (
-    <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-500 max-w-full overflow-x-hidden">
-      {/* Back & Navigation Header */}
-      <div className="flex flex-col gap-6 px-1">
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div className="flex flex-col xs:flex-row items-stretch xs:items-center gap-4 sm:gap-6">
-            <button 
-              onClick={onBack}
-              className="w-12 h-12 sm:w-14 sm:h-14 bg-white border border-gray-100 rounded-xl sm:rounded-2xl flex items-center justify-center hover:border-black hover:shadow-xl transition-all group shrink-0"
-            >
-              <ArrowLeft className="w-5 sm:w-6 h-5 sm:h-6 text-black group-hover:-translate-x-1 transition-transform" />
-            </button>
+    <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-500 max-w-full overflow-x-hidden -mt-4 sm:-mt-6">
+      {/* Navigation Header */}
+      <div className="px-1">
+        <div className="flex flex-col gap-3 p-3 bg-white border border-gray-100 rounded-2xl shadow-sm">
+          {/* Row 1: Side-by-Side Filters */}
+          <div className="flex flex-wrap items-center gap-6 px-2 pb-2 border-b border-gray-50">
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest">Site:</span>
+              <select 
+                value={selectedSite}
+                onChange={(e) => setSelectedSite(e.target.value)}
+                className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-1 focus:ring-black/10 min-w-[140px]"
+              >
+                <option value="all">ALL SITES</option>
+                {SITES.map(s => <option key={s} value={s}>{s.toUpperCase()}</option>)}
+              </select>
+            </div>
             
-            <nav className="flex items-center p-1 bg-white border border-gray-100 rounded-xl sm:rounded-[24px] shadow-sm overflow-x-auto scrollbar-hide no-scrollbar w-full lg:w-auto">
-              <div className="flex items-center min-w-max">
-                {[
-                  { id: "schedule", label: "Interval", icon: Clock },
-                  { id: "calendar", label: "Calendar", icon: CalendarIcon },
-                  { id: "adherence", label: "Adherence", icon: CheckCircle2 },
-                  { id: "attendance", label: "Attendance", icon: ClipboardCheck },
-                  { id: "forecasting", label: "Forecast", icon: TrendingUp },
-                  { id: "planning", label: "Planning", icon: CalendarIcon },
-                  { id: "historical", label: "Historical", icon: History },
-                ].map(tab => (
-                  <button
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id as any)}
-                    className={`flex items-center gap-2 sm:gap-3 px-4 sm:px-6 py-2.5 sm:py-3.5 rounded-lg sm:rounded-[18px] text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${
-                      activeTab === tab.id 
-                        ? "bg-black text-white shadow-xl shadow-black/20" 
-                        : "text-neutral-gray hover:bg-gray-50"
-                    }`}
-                  >
-                    <tab.icon className={`w-3.5 sm:w-4 h-3.5 sm:h-4 ${activeTab === tab.id ? "text-active-red" : "text-neutral-gray"}`} />
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-            </nav>
+            <div className="flex items-center gap-3">
+              <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest">Project:</span>
+              <select 
+                value={selectedProject}
+                onChange={(e) => setSelectedProject(e.target.value)}
+                className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-1 focus:ring-black/10 min-w-[160px]"
+              >
+                <option value="all">ALL PROJECTS</option>
+                {PROJECTS.map(p => <option key={p} value={p}>{p.toUpperCase()}</option>)}
+              </select>
+            </div>
+
+            <div className="ml-auto hidden md:block">
+              <p className="text-[9px] font-black text-neutral-gray uppercase tracking-[0.2em] opacity-30">Global Workforce Filters</p>
+            </div>
           </div>
+
+          {/* Row 2: Navigation Tabs */}
+          <nav className="flex items-center overflow-x-auto scrollbar-hide no-scrollbar pt-1">
+            <div className="flex flex-wrap items-center gap-1.5 min-w-max md:min-w-0">
+              {[
+                { id: "overview", label: "Overview", icon: LayoutDashboard },
+                { id: "schedule", label: "Interval", icon: Clock },
+                { id: "calendar", label: "Calendar", icon: CalendarIcon },
+                { id: "adherence", label: "Adherence", icon: CheckCircle2 },
+                { id: "attendance", label: "Attendance", icon: ClipboardCheck },
+                { id: "forecasting", label: "Forecast", icon: TrendingUp },
+                { id: "planning", label: "Planning", icon: CalendarIcon },
+                { id: "historical", label: "Historical", icon: History },
+              ].map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as any)}
+                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${
+                    activeTab === tab.id 
+                      ? "bg-black text-white shadow-lg shadow-black/20" 
+                      : "text-neutral-gray hover:bg-gray-50"
+                  }`}
+                >
+                  <tab.icon className={`w-3.5 h-3.5 ${activeTab === tab.id ? "text-active-red" : "text-neutral-gray"}`} />
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          </nav>
         </div>
       </div>
 
@@ -902,6 +1046,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
            exit={{ opacity: 0, scale: 0.99, y: -10 }}
            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
         >
+          {activeTab === "overview" && renderOverview()}
           {activeTab === "schedule" && renderScheduleGrid()}
           {activeTab === "calendar" && renderCalendar()}
           {activeTab === "adherence" && (
