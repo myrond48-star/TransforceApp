@@ -69,7 +69,64 @@ const INITIAL_AFTERSALES_REQUESTS = [
   { id: "AS-2024-002", title: "Bug Squashing Phase 2", requester: "Maria Hill", team: "Operations", pic: "Dwi Kurnianto", status: "Pending", priority: "Urgent", date: "2024-05-07" },
 ];
 
-function SupportDashboardView({ onCreateRequest }: { onCreateRequest: () => void }) {
+function SupportDashboardView() {
+  const [ticketCategory, setTicketCategory] = useState("automation");
+
+  const config: Record<string, { 
+    title: string, 
+    subtitle: string, 
+    color: string, 
+    descLabel: string,
+    fields: { label: string, options: string[] }[]
+  }> = {
+    automation: { 
+      title: "New Automation Ticket", 
+      subtitle: "Submit a process for automation", 
+      color: "bg-black", 
+      descLabel: "Process Description",
+      fields: [
+        { label: "Platform", options: ["RPA", "CUSTOM SCRIPT", "INTEGRATION / API", "AI BOT"] },
+        { label: "Complexity", options: ["SIMPLE (TASK)", "MODERATE (WORKFLOW)", "COMPLEX (SYSTEM)"] },
+        { label: "Impact", options: ["HIGH - SCALABILITY", "MEDIUM - TIME SAVING", "LOW - CONVENIENCE"] }
+      ]
+    },
+    training: { 
+      title: "New Training Request", 
+      subtitle: "Submit educational needs", 
+      color: "bg-emerald-600", 
+      descLabel: "Session Goals",
+      fields: [
+        { label: "Category", options: ["ONBOARDING", "REFRESHMENT", "SOFT SKILLS", "TECHNICAL TOOLS"] },
+        { label: "Audience", options: ["NEW HIRES", "SUPPORT AGENTS", "TEAM LEADS", "MANAGEMENT"] },
+        { label: "Delivery", options: ["VIRTUAL / ZOOM", "ON-SITE / OFFICE", "SELF-PACED / RECORDING"] }
+      ]
+    },
+    presale: { 
+      title: "Presale Capacity Request", 
+      subtitle: "Calculate resource needs", 
+      color: "bg-blue-600", 
+      descLabel: "Project Scope",
+      fields: [
+        { label: "Project Type", options: ["IMPLEMENTATION", "MIGRATION", "CONSULTATION", "POC / PILOT"] },
+        { label: "Region", options: ["APAC", "EMEA", "AMER / NORTH", "LATAM"] },
+        { label: "Scope Size", options: ["SMALL (< 100 FTE)", "MEDIUM (100-500 FTE)", "LARGE (500+ FTE)"] }
+      ]
+    },
+    aftersales: { 
+      title: "Aftersales Capacity Request", 
+      subtitle: "Monitor ongoing workload", 
+      color: "bg-orange-600", 
+      descLabel: "Support Requirements",
+      fields: [
+        { label: "Support Level", options: ["TIER 1 (BASIC)", "TIER 2 (TECHNICAL)", "TIER 3 (EXPERT)"] },
+        { label: "Category", options: ["BUG FIXING", "FEATURE ENHANCEMENT", "MAINTENANCE", "GENERAL Q&A"] },
+        { label: "Urgency", options: ["P1 - CRITICAL", "P2 - HIGH", "P3 - MEDIUM", "P4 - LOW"] }
+      ]
+    },
+  };
+
+  const current = config[ticketCategory] || config.automation;
+
   const allRequests = [
     ...INITIAL_REQUESTS.map(req => ({ ...req, type: 'Automation', categoryColor: 'bg-red-50 text-active-red' })),
     ...INITIAL_TRAINING_REQUESTS.map(req => ({ ...req, type: 'Training', categoryColor: 'bg-emerald-50 text-emerald-600' })),
@@ -87,83 +144,83 @@ function SupportDashboardView({ onCreateRequest }: { onCreateRequest: () => void
     <div className="space-y-10">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-black text-black uppercase tracking-tight">Support Overview</h2>
-          <p className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest mt-1">Global Metrics & All Requests</p>
+          <h2 className="text-xl font-black text-black uppercase tracking-tight">Create Ticket</h2>
+          <p className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest mt-1">Submit a new request</p>
         </div>
-        <button 
-          onClick={onCreateRequest}
-          className="flex items-center gap-2 px-6 py-3 bg-black text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-active-red transition-all shadow-lg"
-        >
-          <Plus className="w-4 h-4" />
-          Create Ticket
-        </button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm p-6">
-          <h2 className="text-xs font-black text-black uppercase tracking-widest mb-6">Automation PIC Workloads</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {PICS.map(pic => (
-              <div key={pic.id} className="p-4 rounded-xl border border-gray-50 bg-gray-50/50">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-xs font-bold text-black">{pic.name}</span>
-                  <span className={`text-xs font-black ${pic.workload > 80 ? 'text-active-red' : 'text-emerald-600'}`}>{pic.workload}%</span>
-                </div>
-                <div className="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden mb-2">
-                  <div className={`h-full rounded-full ${pic.workload > 80 ? 'bg-active-red' : 'bg-emerald-500'}`} style={{ width: `${pic.workload}%` }} />
-                </div>
-                <span className="text-[9px] font-black text-neutral-gray uppercase tracking-widest">{pic.tasks} Active Tasks</span>
+      <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className={`${current.color} p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors`}>
+          <div>
+            <h2 className="text-lg font-black text-white uppercase tracking-tight">{current.title}</h2>
+            <p className="text-[10px] text-white/60 font-bold uppercase tracking-widest mt-1">{current.subtitle}</p>
+          </div>
+        </div>
+
+        <div className="p-6 space-y-6">
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-neutral-gray uppercase tracking-widest block font-sans">Support Category</label>
+            <select 
+              value={ticketCategory}
+              onChange={(e) => setTicketCategory(e.target.value)}
+              className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-xs font-bold text-black outline-none focus:border-black transition-all appearance-none cursor-pointer uppercase"
+            >
+              <option value="automation">Automation Request</option>
+              <option value="training">Training Request</option>
+              <option value="presale">Presale Capacity</option>
+              <option value="aftersales">Aftersales Capacity</option>
+            </select>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-neutral-gray uppercase tracking-widest block font-sans">Request Title</label>
+              <input 
+                type="text" 
+                placeholder="ENTER SUBJECT..."
+                className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-xs font-bold text-black outline-none focus:border-black transition-all uppercase placeholder:opacity-30"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-[10px] font-black text-neutral-gray uppercase tracking-widest block font-sans">Priority</label>
+              <select className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-xs font-bold text-black outline-none focus:border-black transition-all appearance-none cursor-pointer">
+                <option>LOW</option>
+                <option>MEDIUM</option>
+                <option>HIGH</option>
+                <option>URGENT</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Dynamic Dropdowns */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
+            {current.fields.map((f, i) => (
+              <div key={i} className="space-y-2">
+                <label className="text-[10px] font-black text-neutral-gray uppercase tracking-widest block font-sans">{f.label}</label>
+                <select className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-[10px] font-bold text-black outline-none focus:border-black transition-all appearance-none cursor-pointer">
+                  {f.options.map((opt, idx) => (
+                    <option key={idx}>{opt}</option>
+                  ))}
+                </select>
               </div>
             ))}
           </div>
-        </div>
-        <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm p-6">
-          <h2 className="text-xs font-black text-black uppercase tracking-widest mb-6">Training Facilitator Status</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {TRAINING_PICS.map(pic => (
-              <div key={pic.id} className="p-4 rounded-xl border border-gray-50 bg-gray-50/50">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-bold text-black">{pic.name}</span>
-                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                </div>
-                <span className="text-[9px] font-bold text-neutral-gray uppercase tracking-widest opacity-80 block mb-2">{pic.role}</span>
-                <span className="text-[10px] font-black text-black uppercase tracking-widest">{pic.tasks} Sessions</span>
-              </div>
-            ))}
+
+          <div className="space-y-2">
+            <label className="text-[10px] font-black text-neutral-gray uppercase tracking-widest block font-sans">{current.descLabel}</label>
+            <textarea 
+              rows={3}
+              placeholder="PROPERLY DESCRIBE THE REQUIREMENTS OR SCOPE..."
+              className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-xs font-bold text-black outline-none focus:border-black transition-all placeholder:opacity-30 resize-none"
+            />
           </div>
-        </div>
-        <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm p-6">
-          <h2 className="text-xs font-black text-black uppercase tracking-widest mb-6">Presale Workloads</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {PRESALE_PICS.map(pic => (
-              <div key={pic.id} className="p-4 rounded-xl border border-gray-50 bg-gray-50/50">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-xs font-bold text-black">{pic.name}</span>
-                  <span className={`text-xs font-black ${pic.workload > 80 ? 'text-active-red' : 'text-blue-600'}`}>{pic.workload}%</span>
-                </div>
-                <div className="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden mb-2">
-                  <div className={`h-full rounded-full ${pic.workload > 80 ? 'bg-active-red' : 'bg-blue-500'}`} style={{ width: `${pic.workload}%` }} />
-                </div>
-                <span className="text-[9px] font-black text-neutral-gray uppercase tracking-widest">{pic.tasks} Active Tasks</span>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div className="bg-white rounded-3xl border border-gray-100 overflow-hidden shadow-sm p-6">
-          <h2 className="text-xs font-black text-black uppercase tracking-widest mb-6">Aftersales Workloads</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {AFTERSALES_PICS.map(pic => (
-              <div key={pic.id} className="p-4 rounded-xl border border-gray-50 bg-gray-50/50">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-xs font-bold text-black">{pic.name}</span>
-                  <span className={`text-xs font-black ${pic.workload > 80 ? 'text-active-red' : 'text-orange-600'}`}>{pic.workload}%</span>
-                </div>
-                <div className="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden mb-2">
-                  <div className={`h-full rounded-full ${pic.workload > 80 ? 'bg-active-red' : 'bg-orange-500'}`} style={{ width: `${pic.workload}%` }} />
-                </div>
-                <span className="text-[9px] font-black text-neutral-gray uppercase tracking-widest">{pic.tasks} Active Tasks</span>
-              </div>
-            ))}
+
+          <div className="flex items-center gap-4 pt-4 border-t border-gray-50">
+            <button 
+              className={`px-8 py-4 ${current.color} text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all shadow-lg shadow-black/10 font-sans ml-auto`}
+            >
+              Submit Request
+            </button>
           </div>
         </div>
       </div>
@@ -893,173 +950,6 @@ function AdminAssignmentView() {
 
 export default function SupportModule({ onBack }: SupportModuleProps) {
   const [activeTab, setActiveTab] = useState(TABS[0].id);
-  const [showRequestModal, setShowRequestModal] = useState(false);
-  const [ticketCategory, setTicketCategory] = useState("automation");
-
-  const renderModalContent = () => {
-    if (!showRequestModal) return null;
-
-    const config: Record<string, { 
-      title: string, 
-      subtitle: string, 
-      color: string, 
-      descLabel: string,
-      fields: { label: string, options: string[] }[]
-    }> = {
-      automation: { 
-        title: "New Automation Ticket", 
-        subtitle: "Submit a process for automation", 
-        color: "bg-black", 
-        descLabel: "Process Description",
-        fields: [
-          { label: "Platform", options: ["RPA", "CUSTOM SCRIPT", "INTEGRATION / API", "AI BOT"] },
-          { label: "Complexity", options: ["SIMPLE (TASK)", "MODERATE (WORKFLOW)", "COMPLEX (SYSTEM)"] },
-          { label: "Impact", options: ["HIGH - SCALABILITY", "MEDIUM - TIME SAVING", "LOW - CONVENIENCE"] }
-        ]
-      },
-      training: { 
-        title: "New Training Request", 
-        subtitle: "Submit educational needs", 
-        color: "bg-emerald-600", 
-        descLabel: "Session Goals",
-        fields: [
-          { label: "Category", options: ["ONBOARDING", "REFRESHMENT", "SOFT SKILLS", "TECHNICAL TOOLS"] },
-          { label: "Audience", options: ["NEW HIRES", "SUPPORT AGENTS", "TEAM LEADS", "MANAGEMENT"] },
-          { label: "Delivery", options: ["VIRTUAL / ZOOM", "ON-SITE / OFFICE", "SELF-PACED / RECORDING"] }
-        ]
-      },
-      presale: { 
-        title: "Presale Capacity Request", 
-        subtitle: "Calculate resource needs", 
-        color: "bg-blue-600", 
-        descLabel: "Project Scope",
-        fields: [
-          { label: "Project Type", options: ["IMPLEMENTATION", "MIGRATION", "CONSULTATION", "POC / PILOT"] },
-          { label: "Region", options: ["APAC", "EMEA", "AMER / NORTH", "LATAM"] },
-          { label: "Scope Size", options: ["SMALL (< 100 FTE)", "MEDIUM (100-500 FTE)", "LARGE (500+ FTE)"] }
-        ]
-      },
-      aftersales: { 
-        title: "Aftersales Capacity Request", 
-        subtitle: "Monitor ongoing workload", 
-        color: "bg-orange-600", 
-        descLabel: "Support Requirements",
-        fields: [
-          { label: "Support Level", options: ["TIER 1 (BASIC)", "TIER 2 (TECHNICAL)", "TIER 3 (EXPERT)"] },
-          { label: "Category", options: ["BUG FIXING", "FEATURE ENHANCEMENT", "MAINTENANCE", "GENERAL Q&A"] },
-          { label: "Urgency", options: ["P1 - CRITICAL", "P2 - HIGH", "P3 - MEDIUM", "P4 - LOW"] }
-        ]
-      },
-    };
-
-    const current = config[ticketCategory] || config.automation;
-
-    return (
-      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
-        <motion.div 
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onClick={() => setShowRequestModal(false)}
-          className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        />
-        <motion.div 
-          initial={{ opacity: 0, scale: 0.9, y: 20 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.9, y: 20 }}
-          className="relative w-full max-w-2xl bg-white rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
-        >
-          <div className={`${current.color} p-6 sm:p-8 flex items-center justify-between shrink-0`}>
-            <div>
-              <h2 className="text-lg sm:text-xl font-black text-white uppercase tracking-tight">{current.title}</h2>
-              <p className="text-[10px] text-white/60 font-bold uppercase tracking-widest mt-1">{current.subtitle}</p>
-            </div>
-            <button 
-              onClick={() => setShowRequestModal(false)}
-              className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center hover:bg-white/20 transition-all text-white"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-
-          <div className="p-8 space-y-6 overflow-y-auto">
-            {/* Category Selector inside Modal */}
-            <div className="space-y-2">
-               <label className="text-[10px] font-black text-neutral-gray uppercase tracking-widest block font-sans">Support Category</label>
-               <select 
-                 value={ticketCategory}
-                 onChange={(e) => setTicketCategory(e.target.value)}
-                 className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-xs font-bold text-black outline-none focus:border-black transition-all appearance-none cursor-pointer uppercase"
-               >
-                 <option value="presale">Presale Capacity</option>
-                 <option value="aftersales">Aftersales Capacity</option>
-                 <option value="training">Training Request</option>
-                 <option value="automation">Automation Request</option>
-               </select>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-neutral-gray uppercase tracking-widest block font-sans">Request Title</label>
-                <input 
-                  type="text" 
-                  placeholder="ENTER SUBJECT..."
-                  className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-xs font-bold text-black outline-none focus:border-black transition-all uppercase placeholder:opacity-30"
-                />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-neutral-gray uppercase tracking-widest block font-sans">Priority</label>
-                <select className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-xs font-bold text-black outline-none focus:border-black transition-all appearance-none cursor-pointer">
-                  <option>LOW</option>
-                  <option>MEDIUM</option>
-                  <option>HIGH</option>
-                  <option>URGENT</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Dynamic Dropdowns */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-              {current.fields.map((f, i) => (
-                <div key={i} className="space-y-2">
-                  <label className="text-[10px] font-black text-neutral-gray uppercase tracking-widest block font-sans">{f.label}</label>
-                  <select className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-[10px] font-bold text-black outline-none focus:border-black transition-all appearance-none cursor-pointer">
-                    {f.options.map((opt, idx) => (
-                      <option key={idx}>{opt}</option>
-                    ))}
-                  </select>
-                </div>
-              ))}
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-neutral-gray uppercase tracking-widest block font-sans">{current.descLabel}</label>
-              <textarea 
-                rows={3}
-                placeholder="PROPERLY DESCRIBE THE REQUIREMENTS OR SCOPE..."
-                className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-xs font-bold text-black outline-none focus:border-black transition-all placeholder:opacity-30 resize-none"
-              />
-            </div>
-
-            <div className="flex items-center gap-4 pt-4 border-t border-gray-50">
-              <button 
-                onClick={() => setShowRequestModal(false)}
-                className="flex-1 px-6 py-4 bg-gray-100 text-black rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-gray-200 transition-all font-sans"
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={() => setShowRequestModal(false)}
-                className={`flex-1 px-6 py-4 ${current.color} text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:brightness-110 transition-all shadow-lg shadow-black/10 font-sans`}
-              >
-                Submit Request
-              </button>
-            </div>
-          </div>
-        </motion.div>
-      </div>
-    );
-  };
 
   return (
     <motion.div 
@@ -1110,7 +1000,7 @@ export default function SupportModule({ onBack }: SupportModuleProps) {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.98 }}
               >
-                <SupportDashboardView onCreateRequest={() => setShowRequestModal(true)} />
+                <SupportDashboardView />
               </motion.div>
             ) : activeTab === "automation" ? (
               <motion.div
@@ -1181,10 +1071,6 @@ export default function SupportModule({ onBack }: SupportModuleProps) {
           </AnimatePresence>
         </div>
       </div>
-
-      <AnimatePresence>
-        {showRequestModal && renderModalContent()}
-      </AnimatePresence>
     </motion.div>
   );
 }
