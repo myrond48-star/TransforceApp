@@ -983,15 +983,15 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
     <div className="space-y-4 sm:space-y-6 animate-in fade-in duration-500 max-w-full overflow-x-hidden -mt-4 sm:-mt-6">
       {/* Navigation Header */}
       <div className="px-1">
-        <div className="flex flex-col gap-3 p-3 bg-white border border-gray-100 rounded-2xl shadow-sm">
-          {/* Row 1: Side-by-Side Filters */}
-          <div className="flex flex-wrap items-center gap-6 px-2 pb-2 border-b border-gray-50">
+        <div className="flex flex-col p-3 bg-white border border-gray-100 rounded-2xl shadow-sm">
+          {/* Header Filters - All Parallel */}
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-3 px-2 pb-3 border-b border-gray-50">
             <div className="flex items-center gap-3">
-              <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest">Site:</span>
+              <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest whitespace-nowrap">Site:</span>
               <select 
                 value={selectedSite}
                 onChange={(e) => setSelectedSite(e.target.value)}
-                className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-1 focus:ring-black/10 min-w-[140px]"
+                className="bg-gray-50 border border-gray-100 rounded-xl px-3 py-1.5 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-1 focus:ring-black/10 min-w-[120px]"
               >
                 <option value="all">ALL SITES</option>
                 {SITES.map(s => <option key={s} value={s}>{s.toUpperCase()}</option>)}
@@ -999,11 +999,11 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
             </div>
 
             <div className="flex items-center gap-3">
-              <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest">Unit:</span>
+              <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest whitespace-nowrap">Unit:</span>
               <select 
                 value={selectedUnit}
                 onChange={(e) => setSelectedUnit(e.target.value)}
-                className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-1 focus:ring-black/10 min-w-[140px]"
+                className="bg-gray-50 border border-gray-100 rounded-xl px-3 py-1.5 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-1 focus:ring-black/10 min-w-[120px]"
               >
                 <option value="all">ALL UNITS</option>
                 {UNITS.map(u => <option key={u} value={u}>{u.toUpperCase()}</option>)}
@@ -1011,25 +1011,25 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
             </div>
             
             <div className="flex items-center gap-3">
-              <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest">Project:</span>
+              <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest whitespace-nowrap">Project:</span>
               <select 
                 value={selectedProject}
                 onChange={(e) => setSelectedProject(e.target.value)}
-                className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-1 focus:ring-black/10 min-w-[160px]"
+                className="bg-gray-50 border border-gray-100 rounded-xl px-3 py-1.5 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-1 focus:ring-black/10 min-w-[140px]"
               >
                 <option value="all">ALL PROJECTS</option>
                 {PROJECTS.map(p => <option key={p} value={p}>{p.toUpperCase()}</option>)}
               </select>
             </div>
 
-            <div className="ml-auto hidden md:block">
-              <p className="text-[9px] font-black text-neutral-gray uppercase tracking-[0.2em] opacity-30">Global Workforce Filters</p>
+            <div className="ml-auto hidden xl:block">
+              <p className="text-[9px] font-black text-neutral-gray uppercase tracking-[0.2em] opacity-30">Global Workforce Analysis</p>
             </div>
           </div>
 
-          {/* Row 2: Navigation Tabs */}
-          <nav className="flex items-center overflow-x-auto scrollbar-hide no-scrollbar pt-1">
-            <div className="flex flex-wrap items-center gap-1.5 min-w-max md:min-w-0">
+          {/* Navigation Tabs - Below Filters */}
+          <nav className="flex items-center overflow-x-auto scrollbar-hide no-scrollbar pt-2 px-1">
+            <div className="flex items-center gap-1.5 min-w-max">
               {[
                 { id: "overview", label: "Overview", icon: LayoutDashboard },
                 { id: "schedule", label: "Interval", icon: Clock },
@@ -1043,13 +1043,13 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as any)}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${
                     activeTab === tab.id 
                       ? "bg-black text-white shadow-lg shadow-black/20" 
                       : "text-neutral-gray hover:bg-gray-50"
                   }`}
                 >
-                  <tab.icon className={`w-3.5 h-3.5 ${activeTab === tab.id ? "text-active-red" : "text-neutral-gray"}`} />
+                  <tab.icon className={`w-3 h-3 ${activeTab === tab.id ? "text-active-red" : "text-neutral-gray"}`} />
                   {tab.label}
                 </button>
               ))}

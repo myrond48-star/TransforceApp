@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from "motion/react";
 import LoginPage from "./components/LoginPage.tsx";
 import WorkforceModule from "./components/WorkforceModule.tsx";
 import HCManagementModule from "./components/HCManagementModule.tsx";
+import IDCreationDeletionModule from "./components/IDCreationDeletionModule.tsx";
 import PLAnalysisModule from "./components/PLAnalysisModule.tsx";
 import AboutModule from "./components/AboutModule.tsx";
 import KPITrackerModule from "./components/KPITrackerModule.tsx";
@@ -133,19 +134,13 @@ export default function App() {
   }
 
   const NavLinks = () => (
-    <>
+    <div className="flex items-center gap-4 lg:gap-8 -mb-1">
       <button 
         onClick={() => { setActiveTab("dashboard"); setActiveModule(null); setIsMobileMenuOpen(false); }}
-        className={`flex items-center pb-1 transition-all ${activeTab === "dashboard" && !activeModule ? "text-black lg:border-b-2 lg:border-active-red" : "text-neutral-gray hover:text-black"}`}
-        title="Home"
+        className={`flex items-center gap-2 pb-1 transition-all border-b-2 ${activeTab === "dashboard" ? "text-black border-active-red" : "text-neutral-gray border-transparent hover:text-black"}`}
       >
-        <Home className="w-4 h-4" />
-      </button>
-      <button 
-        onClick={() => { setActiveTab("dashboard"); setActiveModule(null); setIsMobileMenuOpen(false); }}
-        className={`text-xs font-bold uppercase tracking-widest pb-1 transition-all text-left lg:text-center ${activeTab === "dashboard" ? "text-black lg:border-b-2 lg:border-active-red" : "text-neutral-gray hover:text-black"}`}
-      >
-        Dashboard
+        <Home className="w-3.5 h-3.5" />
+        <span className="text-[10px] font-black uppercase tracking-widest">Dashboard</span>
       </button>
       <button 
         onClick={() => { 
@@ -155,17 +150,17 @@ export default function App() {
           setActiveModule(null); 
           setIsMobileMenuOpen(false); 
         }}
-        className={`text-xs font-bold uppercase tracking-widest pb-1 transition-all text-left lg:text-center ${activeTab === "settings" ? "text-black lg:border-b-2 lg:border-active-red" : "text-neutral-gray hover:text-black"}`}
+        className={`text-[10px] font-black uppercase tracking-widest pb-1 transition-all text-left lg:text-center border-b-2 ${activeTab === "settings" ? "text-black border-active-red" : "text-neutral-gray border-transparent hover:text-black"}`}
       >
         Settings
       </button>
       <button 
         onClick={() => { setActiveTab("about"); setActiveModule(null); setIsMobileMenuOpen(false); }}
-        className={`text-xs font-bold uppercase tracking-widest pb-1 transition-all text-left lg:text-center ${activeTab === "about" ? "text-black lg:border-b-2 lg:border-active-red" : "text-neutral-gray hover:text-black"}`}
+        className={`text-[10px] font-black uppercase tracking-widest pb-1 transition-all text-left lg:text-center border-b-2 ${activeTab === "about" ? "text-black border-active-red" : "text-neutral-gray border-transparent hover:text-black"}`}
       >
         About
       </button>
-    </>
+    </div>
   );
 
   return (
@@ -304,14 +299,7 @@ export default function App() {
                   onClick={() => {
                     const allowed = ["Workforce", "HC Management", "PL Analysis", "KPI Tracker", "Facility Tracker", "ID Creation & Deletion", "Support"];
                     if (allowed.includes(category.title)) {
-                      if (category.title === "ID Creation & Deletion") {
-                        setSettingsModule("security");
-                        setSettingsTab("none");
-                        setActiveTab("settings");
-                        setActiveModule(null);
-                      } else {
-                        setActiveModule(category.title);
-                      }
+                      setActiveModule(category.title);
                     }
                   }}
                   className={`group bg-white rounded-2xl border border-gray-100 overflow-hidden hover:border-active-red/20 hover:shadow-[0_20px_50px_rgba(0,0,0,0.06)] transition-all duration-500 flex flex-col relative cursor-pointer ${
@@ -358,6 +346,7 @@ export default function App() {
             >
               {activeModule === "Workforce" && <WorkforceModule onBack={() => setActiveModule(null)} />}
               {activeModule === "HC Management" && <HCManagementModule onBack={() => setActiveModule(null)} />}
+              {activeModule === "ID Creation & Deletion" && <IDCreationDeletionModule onBack={() => setActiveModule(null)} />}
               {activeModule === "PL Analysis" && <PLAnalysisModule onBack={() => setActiveModule(null)} />}
               {activeModule === "KPI Tracker" && <KPITrackerModule onBack={() => setActiveModule(null)} />}
               {activeModule === "Facility Tracker" && <FacilityTrackerModule onBack={() => setActiveModule(null)} />}

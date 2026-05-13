@@ -121,7 +121,7 @@ export default function HCManagementModule({ onBack }: HCManagementModuleProps) 
           {/* Top Stats */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           <div className="bg-white p-5 sm:p-6 rounded-2xl border border-gray-100 shadow-sm relative overflow-hidden group">
-            <div className="absolute right-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity hidden sm:block">
+            <div className="absolute left-0 top-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity hidden sm:block">
               <Users className="w-16 h-16 text-black" />
             </div>
             <p className="text-[9px] sm:text-[10px] font-bold text-neutral-gray uppercase tracking-widest mb-1">Total Active HC</p>
@@ -532,12 +532,12 @@ export default function HCManagementModule({ onBack }: HCManagementModuleProps) 
     <motion.div 
       initial={{ opacity: 0, scale: 0.98 }} 
       animate={{ opacity: 1, scale: 1 }} 
-      className="space-y-6 sm:space-y-10 -mt-2 sm:-mt-4"
+      className="space-y-6 sm:space-y-8 -mt-2 sm:-mt-4"
     >
       <div className="px-1">
-        <div className="flex flex-col gap-3 p-3 bg-white border border-gray-100 rounded-2xl shadow-sm">
-          {/* Row 1: Side-by-Side Filters */}
-          <div className="flex flex-wrap items-center gap-6 px-2 pb-2 border-b border-gray-50">
+        <div className="flex flex-col p-3 bg-white border border-gray-100 rounded-2xl shadow-sm">
+          {/* Header Filters - All Parallel */}
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-3 px-2 pb-3 border-b border-gray-50">
             <div className="flex items-center gap-3">
               <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest whitespace-nowrap">Time:</span>
               <div className="flex bg-gray-100 p-0.5 rounded-lg">
@@ -595,11 +595,11 @@ export default function HCManagementModule({ onBack }: HCManagementModuleProps) 
             <div className="h-4 w-px bg-gray-100 hidden lg:block" />
 
             <div className="flex items-center gap-3">
-              <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest">Site:</span>
+              <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest whitespace-nowrap">Site:</span>
               <select 
                 value={selectedSite}
                 onChange={(e) => setSelectedSite(e.target.value)}
-                className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-1 focus:ring-black/10 min-w-[140px]"
+                className="bg-gray-50 border border-gray-100 rounded-xl px-3 py-1.5 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-1 focus:ring-black/10 min-w-[120px]"
               >
                 <option value="all">ALL SITES</option>
                 {SITES.map(s => <option key={s} value={s}>{s.toUpperCase()}</option>)}
@@ -607,11 +607,11 @@ export default function HCManagementModule({ onBack }: HCManagementModuleProps) 
             </div>
 
             <div className="flex items-center gap-3">
-              <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest">Unit:</span>
+              <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest whitespace-nowrap">Unit:</span>
               <select 
                 value={selectedUnit}
                 onChange={(e) => setSelectedUnit(e.target.value)}
-                className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-1 focus:ring-black/10 min-w-[140px]"
+                className="bg-gray-50 border border-gray-100 rounded-xl px-3 py-1.5 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-1 focus:ring-black/10 min-w-[120px]"
               >
                 <option value="all">ALL UNITS</option>
                 {UNITS.map(u => <option key={u} value={u}>{u.toUpperCase()}</option>)}
@@ -619,24 +619,24 @@ export default function HCManagementModule({ onBack }: HCManagementModuleProps) 
             </div>
             
             <div className="flex items-center gap-3">
-              <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest">Project:</span>
+              <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest whitespace-nowrap">Project:</span>
               <select 
                 value={selectedProject}
                 onChange={(e) => setSelectedProject(e.target.value)}
-                className="bg-gray-50 border border-gray-100 rounded-xl px-4 py-2 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-1 focus:ring-black/10 min-w-[160px]"
+                className="bg-gray-50 border border-gray-100 rounded-xl px-3 py-1.5 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-1 focus:ring-black/10 min-w-[140px]"
               >
                 <option value="all">ALL PROJECTS</option>
                 {PROJECTS.map(p => <option key={p} value={p}>{p.toUpperCase()}</option>)}
               </select>
             </div>
 
-            <div className="ml-auto hidden md:block">
-              <p className="text-[9px] font-black text-neutral-gray uppercase tracking-[0.2em] opacity-30">Global HC Filters</p>
+            <div className="ml-auto hidden xl:block">
+              <p className="text-[9px] font-black text-neutral-gray uppercase tracking-[0.2em] opacity-30">Global HC Pulse</p>
             </div>
           </div>
 
-          <nav className="flex items-center p-1 overflow-x-auto no-scrollbar scrollbar-hide">
-            <div className="flex items-center min-w-max gap-2">
+          <nav className="flex items-center overflow-x-auto no-scrollbar scrollbar-hide pt-2 px-1">
+            <div className="flex items-center min-w-max gap-1.5">
               {[
                 { id: 'overview', label: 'Summary', icon: TrendingUp },
                 { id: 'employees', label: 'Employees', icon: Users },
@@ -646,13 +646,13 @@ export default function HCManagementModule({ onBack }: HCManagementModuleProps) 
                 <button
                   key={tab.id}
                   onClick={() => setActiveView(tab.id)}
-                  className={`flex items-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 rounded-lg sm:rounded-xl text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${
                     activeView === tab.id 
-                      ? 'bg-black text-white shadow-xl shadow-black/20' 
+                      ? 'bg-black text-white shadow-lg shadow-black/20' 
                       : 'text-neutral-gray hover:bg-gray-50'
                   }`}
                 >
-                  <tab.icon className="w-3.5 h-3.5" />
+                  <tab.icon className={`w-3.5 h-3.5 ${activeView === tab.id ? "text-active-red" : "text-neutral-gray"}`} />
                   {tab.label}
                 </button>
               ))}
