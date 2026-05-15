@@ -9,6 +9,7 @@ import AboutModule from "./components/AboutModule.tsx";
 import KPITrackerModule from "./components/KPITrackerModule.tsx";
 import FacilityTrackerModule from "./components/FacilityTrackerModule.tsx";
 import SupportModule from "./components/SupportModule.tsx";
+import SecurityModule from "./components/SecurityModule.tsx";
 import { Settings as SettingsModule } from "./components/Settings.tsx";
 import { 
   Users, 
@@ -26,7 +27,10 @@ import {
   Menu,
   X,
   LogOut,
-  Home
+  Home,
+  ShieldAlert,
+  HardHat,
+  Briefcase
 } from "lucide-react";
 
 interface Category {
@@ -38,12 +42,12 @@ interface Category {
 const DASHBOARD_DATA: Category[] = [
   {
     title: "Workforce",
-    icon: Users,
+    icon: HardHat,
     description: "Manage human capital, capacity planning, and workforce analytics including PPM, PPH, and staffing trends.",
   },
   {
     title: "HC Management",
-    icon: Users,
+    icon: Briefcase,
     description: "Specialized tools for managing personnel records, organizational structure, and headcount optimization.",
   },
   {
@@ -75,6 +79,11 @@ const DASHBOARD_DATA: Category[] = [
     title: "Support",
     icon: LifeBuoy,
     description: "Specialized assistance for presale/aftersales capacity calculations, training, and automation requests.",
+  },
+  {
+    title: "Security",
+    icon: ShieldAlert,
+    description: "Enterprise-grade protection including network perimeters, SCRAM-SHA-256 auth, RBAC/RLS, and pgaudit monitoring.",
   },
 ];
 
@@ -113,6 +122,8 @@ export default function App() {
     setIsLoggedIn(false);
     localStorage.removeItem("isLoggedIn");
     sessionStorage.removeItem("isLoggedIn");
+    localStorage.removeItem("token");
+    sessionStorage.removeItem("token");
     setActiveTab("dashboard");
     setActiveModule(null);
   };
@@ -297,13 +308,13 @@ export default function App() {
                   key={idx}
                   variants={itemVariants}
                   onClick={() => {
-                    const allowed = ["Workforce", "HC Management", "PL Analysis", "KPI Tracker", "Facility Tracker", "ID Creation & Deletion", "Support"];
+                    const allowed = ["Workforce", "HC Management", "PL Analysis", "KPI Tracker", "Facility Tracker", "ID Creation & Deletion", "Support", "Security"];
                     if (allowed.includes(category.title)) {
                       setActiveModule(category.title);
                     }
                   }}
                   className={`group bg-white rounded-2xl border border-gray-100 overflow-hidden hover:border-active-red/20 hover:shadow-[0_20px_50px_rgba(0,0,0,0.06)] transition-all duration-500 flex flex-col relative cursor-pointer ${
-                    !(["Workforce", "HC Management", "PL Analysis", "KPI Tracker", "Facility Tracker", "ID Creation & Deletion", "Support"].includes(category.title)) ? 'opacity-60 grayscale' : ''
+                    !(["Workforce", "HC Management", "PL Analysis", "KPI Tracker", "Facility Tracker", "ID Creation & Deletion", "Support", "Security"].includes(category.title)) ? 'opacity-60 grayscale' : ''
                   }`}
                   id={`category-${idx}`}
                 >
@@ -351,6 +362,7 @@ export default function App() {
               {activeModule === "KPI Tracker" && <KPITrackerModule onBack={() => setActiveModule(null)} />}
               {activeModule === "Facility Tracker" && <FacilityTrackerModule onBack={() => setActiveModule(null)} />}
               {activeModule === "Support" && <SupportModule onBack={() => setActiveModule(null)} />}
+              {activeModule === "Security" && <SecurityModule onBack={() => setActiveModule(null)} />}
             </motion.div>
           )}
         </AnimatePresence>
@@ -370,7 +382,13 @@ export default function App() {
 
           <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-10">
             {['Compliance', 'Security', 'Network Status'].map((link) => (
-              <a key={link} href="#" className="text-[10px] font-bold uppercase tracking-widest text-neutral-gray hover:text-black transition-colors">{link}</a>
+              <button 
+                key={link} 
+                onClick={() => { if (link === 'Security') setActiveModule('Security'); }}
+                className="text-[10px] font-bold uppercase tracking-widest text-neutral-gray hover:text-black transition-colors"
+              >
+                {link}
+              </button>
             ))}
           </div>
         </div>

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { motion } from "motion/react";
 import { User, Lock, ChevronRight, Globe, ShieldCheck } from "lucide-react";
+import { login } from "../lib/api.ts";
 
 interface LoginPageProps {
   onLogin: (remember: boolean) => void;
@@ -14,20 +15,19 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setError("");
 
-    // Simulate login logic
-    setTimeout(() => {
-      if (username === "admin" && password === "password123") {
-        onLogin(rememberMe);
-      } else {
-        setError("Invalid credentials. Please use admin / password123");
-        setIsLoading(false);
-      }
-    }, 1200);
+    try {
+      const result = await login(username, password, rememberMe);
+      // In Supabase client, result has { data, error } or { user, session }
+      onLogin(rememberMe);
+    } catch (err: any) {
+      setError(err.message || "Invalid credentials. Try admin / admin123");
+      setIsLoading(false);
+    }
   };
 
   return (

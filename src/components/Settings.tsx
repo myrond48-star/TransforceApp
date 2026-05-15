@@ -95,14 +95,16 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
   // Activities State
   const [activities, setActivities] = useState(settings.activities || {});
 
-  // SQL Infrastructure State
-  const [sqlConfig, setSqlConfig] = useState({
-    host: 'db.transcosmos.id',
-    port: '5432',
-    database: 'wfm_production',
-    username: 'admin_wfm',
-    password: '••••••••••••',
-    ssl: true
+  // SQL Infrastructure State (Now Supabase)
+  const [supabaseConfig, setSupabaseConfig] = useState(() => {
+    const savedUrl = typeof window !== 'undefined' ? localStorage.getItem('supabase_url') : null;
+    const savedKey = typeof window !== 'undefined' ? localStorage.getItem('supabase_key') : null;
+    
+    return {
+      url: savedUrl || (import.meta.env.VITE_SUPABASE_URL as string) || '',
+      anonKey: savedKey || (import.meta.env.VITE_SUPABASE_ANON_KEY as string) || '',
+      status: 'Cloud Backend'
+    };
   });
 
   // Business Rules State
@@ -120,7 +122,7 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
   const [kpiTargets, setKpiTargets] = useState({ ServiceLevel: 85, Occupancy: 80, AHT: 280 });
 
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
-  const [dbStatus, setDbStatus] = useState<{ status: string; connected?: boolean; database?: boolean; error?: string } | null>(null);
+  const [dbStatus, setDbStatus] = useState<{ status: string; connected?: boolean; service?: string; error?: string } | null>(null);
   const [isTestingDb, setIsTestingDb] = useState(false);
   const [dbUrlInput, setDbUrlInput] = useState('');
   const [isSavingDb, setIsSavingDb] = useState(false);
@@ -129,14 +131,19 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
     setIsTestingDb(true);
     setDbStatus(null);
     try {
-      const result = await checkConnection();
+      // Sanitize URL before testing
+      let cleanUrl = supabaseConfig.url.trim();
+      if (cleanUrl.endsWith('/')) cleanUrl = cleanUrl.slice(0, -1);
+      if (cleanUrl.endsWith('/rest/v1')) cleanUrl = cleanUrl.slice(0, -8);
+
+      const result = await checkConnection(cleanUrl, supabaseConfig.anonKey);
       setDbStatus(result);
-      if (result.status === 'ok' && result.database) {
-        showStatus("Database check complete: URL configured! ✅");
-      } else if (result.status === 'ok' && !result.database) {
-        showStatus("Backend reachable, but DATABASE_URL is missing ⚠️");
+      if (result.status === 'ok' && result.service) {
+        showStatus(`Connection complete: ${result.service} active! ✅`);
+      } else if (result.status === 'ok' && !result.service) {
+        showStatus("Service reachable, but configuration check failed ⚠️");
       } else {
-        showStatus("Database connection test failed ❌");
+        showStatus("Connection test failed ❌");
       }
     } catch (err) {
       setDbStatus({ status: 'error', error: 'Failed to reach backend' });
@@ -146,36 +153,38 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
   };
 
   const handleSaveDbUrl = async () => {
-    let urlToUse = dbUrlInput;
-
-    if (!urlToUse) {
-      if (sqlConfig.host && sqlConfig.username && sqlConfig.password && sqlConfig.database) {
-        // Construct the URL from individual fields
-        const host = sqlConfig.host;
-        const port = sqlConfig.port || '5432';
-        const user = encodeURIComponent(sqlConfig.username);
-        const pass = encodeURIComponent(sqlConfig.password);
-        const dbName = sqlConfig.database;
-        urlToUse = `postgresql://${user}:${pass}@${host}:${port}/${dbName}`;
-        
-        // Add SSL param if enabled
-        if (sqlConfig.ssl) {
-          urlToUse += "?sslmode=no-verify";
-        }
-      } else {
-        alert("Please enter either a connection string or all database host details");
-        return;
-      }
-    }
-
+    if (isSavingDb) return;
     setIsSavingDb(true);
+    setSaveStatus("Initializing infrastructure sync...");
+    
     try {
-      await updateDbConfig(urlToUse);
-      showStatus("Connection string updated and verified! ✅");
-      handleTestConnection();
+      // 1. Sanitize the inputs
+      const cleanUrl = supabaseConfig.url.trim().split('/rest/v1')[0].replace(/\/$/, "");
+      const cleanKey = supabaseConfig.anonKey.trim();
+
+      if (!cleanUrl.startsWith('http')) {
+        throw new Error("Invalid URL: Must start with http:// or https://");
+      }
+
+      console.log("Saving new configuration:", { url: cleanUrl });
+      
+      // 2. Perform the update - this writes to localStorage
+      await updateDbConfig(cleanUrl, cleanKey);
+      
+      // 3. Update local state to reflect cleaned values
+      setSupabaseConfig(prev => ({ ...prev, url: cleanUrl, anonKey: cleanKey }));
+      
+      showStatus("Configuration committed! Synchronizing nodes... ✅");
+      
+      // 4. Force a hard reload to ensure all modules re-initialize with new singleton
+      setTimeout(() => {
+        console.log("Performing system reload...");
+        window.location.replace(window.location.origin + window.location.pathname + '?config_updated=true');
+      }, 1000);
+      
     } catch (err: any) {
-      alert("Failed to update database: " + err.message);
-    } finally {
+      console.error("Save error:", err);
+      alert("Failed to commit infrastructure: " + err.message);
       setIsSavingDb(false);
     }
   };
@@ -448,8 +457,13 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
               </>
             )}
             {activeModule !== 'workforce' && (
-              <button onClick={() => showStatus("Module configuration updated!")} className="flex-1 md:flex-none px-6 py-2.5 bg-slate-950 text-white font-black rounded-xl hover:bg-black shadow-lg shadow-slate-200 transition-all flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest text-nowrap">
-                <Save size={16} /> Commit Configuration
+              <button 
+                disabled={activeModule === 'infra' && isSavingDb}
+                onClick={activeModule === 'infra' ? handleSaveDbUrl : () => showStatus("Module configuration updated!")} 
+                className="flex-1 md:flex-none px-6 py-2.5 bg-slate-950 text-white font-black rounded-xl hover:bg-black shadow-lg shadow-slate-200 transition-all flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest text-nowrap"
+              >
+                {activeModule === 'infra' && isSavingDb ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
+                Commit Configuration
               </button>
             )}
           </div>
@@ -734,29 +748,29 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
             <div className="flex-1">
               <h4 className="m-0 mb-2 text-slate-900 text-base font-black flex items-center gap-2.5 tracking-widest uppercase">
                 <Database size={18} className="text-rose-600" />
-                SQL INFRASTRUCTURE
+                SUPABASE INFRASTRUCTURE
               </h4>
-              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tight">Active Relational Database Connection Kernel</p>
+              <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tight">Cloud Firestore & Auth Protocol (PostgREST)</p>
               <div className="mt-8 space-y-6">
                 <div>
                   <div className="flex items-center justify-between mb-2 px-1">
-                    <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest block">Connection String (URL or IP)</label>
-                    <span className="text-[8px] text-slate-400 font-black uppercase tracking-tighter italic">Recommended: postgresql://user:pass@host:port/db</span>
+                    <label className="text-[9px] font-black text-slate-600 uppercase tracking-widest block">Project Endpoint (URL)</label>
+                    <span className="text-[8px] text-slate-400 font-black uppercase tracking-tighter italic">Found in Settings {'>'} API</span>
                   </div>
                   <input 
-                    type="password" 
-                    placeholder="postgresql://user:password@host:port/dbname"
-                    value={dbUrlInput}
-                    onChange={(e) => setDbUrlInput(e.target.value)}
+                    type="text" 
+                    placeholder="https://your-project.supabase.co"
+                    value={supabaseConfig.url}
+                    onChange={(e) => setSupabaseConfig({...supabaseConfig, url: e.target.value})}
                     className="w-full p-5 bg-slate-50 border border-slate-200 rounded-[1.25rem] text-slate-900 text-xs font-black outline-none focus:border-rose-500 transition-all font-mono placeholder:text-slate-300" 
                   />
-                  <p className="text-[8px] text-slate-400 font-bold mt-3 px-1 uppercase tracking-tight">Warning: Sensitive connection data is encrypted in transit but stored in kernel memory.</p>
+                  <p className="text-[8px] text-slate-400 font-bold mt-3 px-1 uppercase tracking-tight">Warning: Core system uses environment variables for live connections. UI updates metadata only.</p>
                 </div>
               </div>
               {dbStatus && (
-                <div className={`mt-6 p-4 rounded-2xl border text-[10px] font-black uppercase tracking-widest flex items-center gap-2.5 ${dbStatus.database ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600' : 'bg-rose-500/10 border-rose-500/30 text-rose-600'}`}>
+                <div className={`mt-6 p-4 rounded-2xl border text-[10px] font-black uppercase tracking-widest flex items-center gap-2.5 ${dbStatus.status === 'ok' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600' : 'bg-rose-500/10 border-rose-500/30 text-rose-600'}`}>
                   <AlertCircle size={15} />
-                  {dbStatus.database ? 'Database Connection Active & Secured' : dbStatus.error || 'DATABASE_URL Missing from Environment'}
+                  {dbStatus.status === 'ok' ? `${dbStatus.service} Connection Active & Secured` : dbStatus.error || 'Connection Failed'}
                 </div>
               )}
             </div>
@@ -775,7 +789,7 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                 className="flex-1 md:flex-none px-6 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2.5 transition-all bg-rose-600 text-white hover:bg-rose-700 shadow-xl shadow-rose-900/10 active:scale-95 disabled:opacity-50"
               >
                 {isSavingDb ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
-                {isSavingDb ? 'Initializing...' : 'Update & Connect'}
+                {isSavingDb ? 'Updating...' : 'Commit Configuration'}
               </button>
             </div>
           </div>
@@ -783,38 +797,27 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="space-y-6">
               <div>
-                <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-3 px-1">Database Host</label>
-                <input type="text" value={sqlConfig.host} onChange={e => setSqlConfig({...sqlConfig, host: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 text-xs font-black outline-none focus:border-rose-500 transition-all font-mono" />
+                <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-3 px-1">Anon Public Key</label>
+                <input 
+                  type="password" 
+                  value={supabaseConfig.anonKey} 
+                  onChange={e => setSupabaseConfig({...supabaseConfig, anonKey: e.target.value})} 
+                  className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 text-xs font-black outline-none focus:border-rose-500 transition-all font-mono" 
+                />
               </div>
               <div>
-                <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-3 px-1">Target Schema / DB Name</label>
-                <input type="text" value={sqlConfig.database} onChange={e => setSqlConfig({...sqlConfig, database: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 text-xs font-black outline-none focus:border-rose-500 transition-all font-mono" />
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-3 px-1">Port</label>
-                  <input type="text" value={sqlConfig.port} onChange={e => setSqlConfig({...sqlConfig, port: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 text-xs font-black outline-none focus:border-rose-500 transition-all font-mono" />
-                </div>
-                <div className="flex items-end pb-3">
-                  <label className="flex items-center gap-3 cursor-pointer">
-                    <input type="checkbox" checked={sqlConfig.ssl} onChange={e => setSqlConfig({...sqlConfig, ssl: e.target.checked})} className="w-5 h-5 text-rose-600 rounded border-slate-200 bg-white" />
-                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">SSL Enabled</span>
-                  </label>
-                </div>
+                <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-3 px-1">Service Tier</label>
+                <input type="text" readOnly value="Supabase Enterprise" className="w-full p-4 bg-slate-100 border border-slate-200 rounded-2xl text-slate-400 text-[10px] font-black outline-none transition-all font-mono" />
               </div>
             </div>
             <div className="space-y-6">
               <div>
-                <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-3 px-1">Access Principal (User)</label>
-                <input type="text" value={sqlConfig.username} onChange={e => setSqlConfig({...sqlConfig, username: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 text-xs font-black outline-none focus:border-rose-500 transition-all font-mono" />
-              </div>
-              <div>
-                <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-3 px-1">Principal Secret (Password)</label>
-                <input type="password" value={sqlConfig.password} onChange={e => setSqlConfig({...sqlConfig, password: e.target.value})} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 text-xs font-black outline-none focus:border-rose-500 transition-all font-mono" />
+                <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-3 px-1">Auth Provider</label>
+                <input type="text" readOnly value="GoTrue / Identity" className="w-full p-4 bg-slate-100 border border-slate-200 rounded-2xl text-slate-400 text-[10px] font-black outline-none transition-all font-mono" />
               </div>
               <div className="bg-slate-50 p-6 rounded-2xl border border-slate-100">
                 <p className="text-[9px] text-slate-400 font-bold leading-relaxed uppercase tracking-tight">
-                  System ensures connection persistence via regional SQL kernels. Principal must have read/write permissions on the target schema.
+                  System ensures connectivity via Supabase-JS SDK. Anon key allows public access based on RLS (Row Level Security) policies defined in the portal.
                 </p>
               </div>
             </div>

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import { 
   ArrowLeft, 
@@ -20,8 +20,10 @@ import {
   X,
   CheckCircle2,
   Sun,
-  Moon
+  Moon,
+  RefreshCw
 } from "lucide-react";
+import { fetchEmployees, createEmployee, updateEmployee, deleteEmployee } from "../lib/api";
 import { 
   BarChart, 
   Bar, 
@@ -54,65 +56,186 @@ const UNITS = ["Operation", "Support", "Technology"];
 const PROJECTS = ["Project Alpha", "Project Beta"];
 const LANGUAGES = ["English", "Indonesian", "Japanese"];
 
-const employeeList = [
-  { id: "EMP001", name: "Alexander Mitchell", role: "Ops Lead", status: "Active", joinDate: "2023-05-12", email: "a.mitchell@transforce.com", site: "Jakarta", unit: "Operation", project: "Project Alpha" },
-  { id: "EMP002", name: "Sarah Jenkins", role: "Sr. Analyst", status: "Active", joinDate: "2023-06-15", email: "s.jenkins@transforce.com", site: "Surabaya", unit: "Support", project: "Project Beta" },
-  { id: "EMP003", name: "David Chen", role: "Support Spec", status: "On Leave", joinDate: "2024-01-10", email: "d.chen@transforce.com", site: "Bandung", unit: "Technology", project: "Project Alpha" },
-  { id: "EMP004", name: "Elena Rodriguez", role: "QC Engineer", status: "Active", joinDate: "2022-11-20", email: "e.rodriguez@transforce.com", site: "Jakarta", unit: "Operation", project: "Project Beta" },
-  { id: "EMP005", name: "Marcus Thorne", role: "Wfm Manager", status: "Active", joinDate: "2023-02-28", email: "m.thorne@transforce.com", site: "Surabaya", unit: "Support", project: "Project Alpha" },
-];
-
 export default function HCManagementModule({ onBack }: HCManagementModuleProps) {
   const [activeView, setActiveView] = useState("overview");
 
   const [filterMode, setFilterMode] = useState<"month" | "range" | "single">("month");
-  const [selectedSite, setSelectedSite] = useState("all");
-  const [selectedUnit, setSelectedUnit] = useState("all");
+  const [selectedLocation, setSelectedLocation] = useState("all");
+  const [selectedOPG, setSelectedOPG] = useState("all");
   const [selectedProject, setSelectedProject] = useState("all");
   const [selectedLanguage, setSelectedLanguage] = useState("all");
 
-  // CRUD State
-  const [employees, setEmployees] = useState(employeeList);
+  // Supabase State
+  const [employees, setEmployees] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<any | null>(null);
+  const [showConfigWarning, setShowConfigWarning] = useState(false);
+
+  const isSupabaseConfigured = 
+    (!import.meta.env.VITE_SUPABASE_URL?.includes('placeholder')) || 
+    (typeof window !== 'undefined' && !!localStorage.getItem('supabase_url'));
+
   const [formData, setFormData] = useState({
     id: "",
+    opg: "TCID Jakarta",
+    project: "Project Alpha",
+    position: "Agent",
+    channel: "Voice",
+    skill: "English",
+    nip: "",
     name: "",
-    role: "",
-    status: "Active",
-    joinDate: new Date().toISOString().split('T')[0],
-    email: ""
+    team_leader_name: "",
+    supervisor_name: "",
+    email: "",
+    gender: "Male",
+    training_batch: "",
+    hire_status: "Probation",
+    join_date_project_live: new Date().toISOString().split('T')[0],
+    join_date_tcid: new Date().toISOString().split('T')[0],
+    years_of_service: "0",
+    id_card: "",
+    access_card_number: "",
+    building_location: "Menara Transcosmos",
+    remarks: "",
+    operational_manager: "",
+    unit_manager: "",
+    sto: "",
+    status: "Active"
   });
+
+  useEffect(() => {
+    loadEmployees();
+    if (!isSupabaseConfigured) {
+      setShowConfigWarning(true);
+    }
+  }, []);
+
+  const loadEmployees = async () => {
+    setIsLoading(true);
+    setFetchError(null);
+    
+    // Create a timeout to prevent infinite loading
+    const timeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error("Connection timed out. Please check your Supabase URL and Key.")), 15000)
+    );
+
+    try {
+      // Race the fetch against a timeout
+      const data = await Promise.race([
+        fetchEmployees(),
+        timeoutPromise
+      ]) as any[];
+      
+      setEmployees(data || []);
+    } catch (err: any) {
+      console.error("Failed to load employees:", err);
+      setFetchError(err.message || "Failed to connect to Supabase database");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleEdit = (emp: any) => {
     setEditingEmployee(emp);
-    setFormData(emp);
+    setFormData({
+      ...emp,
+      join_date_project_live: emp.join_date_project_live || new Date().toISOString().split('T')[0],
+      join_date_tcid: emp.join_date_tcid || new Date().toISOString().split('T')[0]
+    });
     setIsFormOpen(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string | number) => {
     if (confirm("Are you sure you want to delete this employee?")) {
-      setEmployees(employees.filter(e => e.id !== id));
+      try {
+        await deleteEmployee(id);
+        setEmployees(employees.filter(e => e.id !== id));
+      } catch (err) {
+        alert("Failed to delete employee");
+      }
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingEmployee) {
-      setEmployees(employees.map(e => e.id === editingEmployee.id ? formData : e));
-    } else {
-      const newId = `EMP${String(employees.length + 1).padStart(3, '0')}`;
-      setEmployees([...employees, { ...formData, id: newId }]);
+    setIsLoading(true);
+    try {
+      // Prepare payload to match SQL schema exactly
+      const payload = {
+        opg: formData.opg,
+        project: formData.project,
+        position: formData.position,
+        channel: formData.channel,
+        skill: formData.skill,
+        nip: formData.nip,
+        name: formData.name,
+        team_leader_name: formData.team_leader_name,
+        supervisor_name: formData.supervisor_name,
+        email: formData.email,
+        gender: formData.gender,
+        training_batch: formData.training_batch,
+        hire_status: formData.hire_status,
+        join_date_project_live: formData.join_date_project_live,
+        join_date_tcid: formData.join_date_tcid,
+        years_of_service: formData.years_of_service,
+        id_card: formData.id_card,
+        access_card_number: formData.access_card_number,
+        building_location: formData.building_location,
+        remarks: formData.remarks,
+        operational_manager: formData.operational_manager,
+        unit_manager: formData.unit_manager,
+        sto: formData.sto
+      };
+
+      if (editingEmployee) {
+        const updated = await updateEmployee(editingEmployee.id, payload);
+        setEmployees(employees.map(e => e.id === editingEmployee.id ? updated : e));
+      } else {
+        const created = await createEmployee(payload);
+        setEmployees([created, ...employees]);
+      }
+      setIsFormOpen(false);
+      setEditingEmployee(null);
+      setFormData({ 
+        id: "", 
+        opg: "TCID Jakarta",
+        project: "Project Alpha",
+        position: "Agent",
+        channel: "Voice",
+        skill: "English",
+        nip: "",
+        name: "",
+        team_leader_name: "",
+        supervisor_name: "",
+        email: "",
+        gender: "Male",
+        training_batch: "",
+        hire_status: "Probation",
+        join_date_project_live: new Date().toISOString().split('T')[0],
+        join_date_tcid: new Date().toISOString().split('T')[0],
+        years_of_service: "0",
+        id_card: "",
+        access_card_number: "",
+        building_location: "Menara Transcosmos",
+        remarks: "",
+        operational_manager: "",
+        unit_manager: "",
+        sto: "",
+        status: "Active"
+      });
+    } catch (err: any) {
+      alert("Failed to save employee data: " + (err.message || "Unknown error"));
+    } finally {
+      setIsLoading(false);
     }
-    setIsFormOpen(false);
-    setEditingEmployee(null);
-    setFormData({ id: "", name: "", role: "", status: "Active", joinDate: new Date().toISOString().split('T')[0], email: "" });
   };
 
   const renderOverview = () => {
       const filteredCount = employees
-        .filter(emp => selectedSite === "all" || (emp as any).site === selectedSite)
-        .filter(emp => selectedUnit === "all" || (emp as any).unit === selectedUnit)
+        .filter(emp => selectedLocation === "all" || (emp as any).building_location === selectedLocation)
+        .filter(emp => selectedOPG === "all" || (emp as any).opg === selectedOPG)
         .filter(emp => selectedProject === "all" || (emp as any).project === selectedProject)
         .length;
   
@@ -220,11 +343,18 @@ export default function HCManagementModule({ onBack }: HCManagementModuleProps) 
           <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-gray" />
           <input 
             type="text" 
-            placeholder="SEARCH EMPLOYEE NAME OR ID..." 
+            placeholder="SEARCH EMPLOYEE NAME OR NIP..." 
             className="w-full bg-gray-50 border-none rounded-xl pl-10 pr-4 py-2.5 text-[11px] font-bold uppercase tracking-tight focus:ring-1 focus:ring-black outline-none"
           />
         </div>
         <div className="flex flex-row items-center gap-2">
+          <button 
+            onClick={loadEmployees}
+            disabled={isLoading}
+            className="flex-1 sm:flex-none justify-center px-4 py-2.5 border border-gray-200 rounded-xl text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 hover:border-black transition-all disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} /> {isLoading ? 'Syncing...' : 'Reload Data'}
+          </button>
           <button className="flex-1 sm:flex-none justify-center px-4 py-2.5 border border-gray-200 rounded-xl text-[10px] font-bold uppercase tracking-widest flex items-center gap-2 hover:border-black transition-all">
             <Filter className="w-3.5 h-3.5" /> Filter
           </button>
@@ -237,19 +367,19 @@ export default function HCManagementModule({ onBack }: HCManagementModuleProps) 
       {/* Mobile Card View */}
       <div className="block lg:hidden divide-y divide-gray-50">
         {employees
-          .filter(emp => selectedSite === "all" || (emp as any).site === selectedSite)
-          .filter(emp => selectedUnit === "all" || (emp as any).unit === selectedUnit)
+          .filter(emp => selectedLocation === "all" || (emp as any).building_location === selectedLocation)
+          .filter(emp => selectedOPG === "all" || (emp as any).opg === selectedOPG)
           .filter(emp => selectedProject === "all" || (emp as any).project === selectedProject)
           .map((emp) => (
           <div key={emp.id} className="p-4 flex flex-col gap-4">
              <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center font-bold text-[10px] text-neutral-gray">
-                    {emp.name.split(' ').map(n => n[0]).join('')}
+                    {emp.name.split(' ').map((n: any) => n[0]).join('')}
                   </div>
                   <div>
                     <p className="font-bold text-sm text-black">{emp.name}</p>
-                    <p className="text-[10px] text-neutral-gray uppercase tracking-tighter mt-0.5">{emp.id}</p>
+                    <p className="text-[10px] text-neutral-gray uppercase tracking-tighter mt-0.5">{emp.nip}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
@@ -259,13 +389,13 @@ export default function HCManagementModule({ onBack }: HCManagementModuleProps) 
              </div>
              <div className="grid grid-cols-2 gap-4 bg-gray-50/50 p-3 rounded-xl border border-gray-100">
                 <div>
-                   <p className="text-[8px] font-bold text-neutral-gray uppercase tracking-widest">Role</p>
+                   <p className="text-[8px] font-bold text-neutral-gray uppercase tracking-widest">Project / Position</p>
                    <p className="text-[11px] font-bold text-black flex items-center gap-1.5 mt-0.5">
-                     <Briefcase className="w-3 h-3 text-neutral-gray/40" /> {emp.role}
+                     <Briefcase className="w-3 h-3 text-neutral-gray/40" /> {emp.project} | {emp.position}
                    </p>
                 </div>
                 <div>
-                   <p className="text-[8px] font-bold text-neutral-gray uppercase tracking-widest">Status/Join Date</p>
+                   <p className="text-[8px] font-bold text-neutral-gray uppercase tracking-widest">Status / Date</p>
                    <div className="flex flex-col gap-1 mt-0.5">
                      <span className={`w-fit px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-widest ${
                         emp.status === 'Active' ? 'bg-green-50 text-green-600' : 
@@ -273,7 +403,7 @@ export default function HCManagementModule({ onBack }: HCManagementModuleProps) 
                       }`}>
                         {emp.status}
                       </span>
-                      <p className="text-[10px] font-bold text-neutral-gray mt-1">{emp.joinDate}</p>
+                      <p className="text-[10px] font-bold text-neutral-gray mt-1">{emp.join_date_tcid}</p>
                    </div>
                 </div>
              </div>
@@ -283,61 +413,127 @@ export default function HCManagementModule({ onBack }: HCManagementModuleProps) 
 
       {/* Desktop Table View */}
       <div className="hidden lg:block overflow-x-auto">
-        <table className="w-full text-left">
+        <table className="w-full text-left min-w-[2500px]">
           <thead className="bg-gray-50 border-b border-gray-100">
             <tr>
-              <th className="px-6 py-4 text-[10px] font-bold text-neutral-gray uppercase tracking-widest whitespace-nowrap">Employee Details</th>
-              <th className="px-6 py-4 text-[10px] font-bold text-neutral-gray uppercase tracking-widest whitespace-nowrap">Role/Position</th>
-              <th className="px-6 py-4 text-[10px] font-bold text-neutral-gray uppercase tracking-widest text-center">Status</th>
-              <th className="px-6 py-4 text-[10px] font-bold text-neutral-gray uppercase tracking-widest whitespace-nowrap">Join Date</th>
-              <th className="px-6 py-4 text-[10px] font-bold text-neutral-gray uppercase tracking-widest text-right">Actions</th>
+              <th className="px-4 py-4 text-[9px] font-black text-neutral-gray uppercase tracking-widest">OPG</th>
+              <th className="px-4 py-4 text-[9px] font-black text-neutral-gray uppercase tracking-widest">Project</th>
+              <th className="px-4 py-4 text-[9px] font-black text-neutral-gray uppercase tracking-widest">Position</th>
+              <th className="px-4 py-4 text-[9px] font-black text-neutral-gray uppercase tracking-widest">Channel</th>
+              <th className="px-4 py-4 text-[9px] font-black text-neutral-gray uppercase tracking-widest">Skill</th>
+              <th className="px-4 py-4 text-[9px] font-black text-neutral-gray uppercase tracking-widest">NIP</th>
+              <th className="px-4 py-4 text-[9px] font-black text-neutral-gray uppercase tracking-widest">Name</th>
+              <th className="px-4 py-4 text-[9px] font-black text-neutral-gray uppercase tracking-widest">Team Leader Name</th>
+              <th className="px-4 py-4 text-[9px] font-black text-neutral-gray uppercase tracking-widest">Supervisor Name</th>
+              <th className="px-4 py-4 text-[9px] font-black text-neutral-gray uppercase tracking-widest">Email</th>
+              <th className="px-4 py-4 text-[9px] font-black text-neutral-gray uppercase tracking-widest">Gender</th>
+              <th className="px-4 py-4 text-[9px] font-black text-neutral-gray uppercase tracking-widest">Training Batch</th>
+              <th className="px-4 py-4 text-[9px] font-black text-neutral-gray uppercase tracking-widest">Hire Status</th>
+              <th className="px-4 py-4 text-[9px] font-black text-neutral-gray uppercase tracking-widest">Join Project Live</th>
+              <th className="px-4 py-4 text-[9px] font-black text-neutral-gray uppercase tracking-widest">Join TCID</th>
+              <th className="px-4 py-4 text-[9px] font-black text-neutral-gray uppercase tracking-widest">Years of Service</th>
+              <th className="px-4 py-4 text-[9px] font-black text-neutral-gray uppercase tracking-widest">ID Card</th>
+              <th className="px-4 py-4 text-[9px] font-black text-neutral-gray uppercase tracking-widest">Access Card</th>
+              <th className="px-4 py-4 text-[9px] font-black text-neutral-gray uppercase tracking-widest">Building Location</th>
+              <th className="px-4 py-4 text-[9px] font-black text-neutral-gray uppercase tracking-widest">Remarks</th>
+              <th className="px-4 py-4 text-[9px] font-black text-neutral-gray uppercase tracking-widest">Ops Manager</th>
+              <th className="px-4 py-4 text-[9px] font-black text-neutral-gray uppercase tracking-widest">Unit Manager</th>
+              <th className="px-4 py-4 text-[9px] font-black text-neutral-gray uppercase tracking-widest">STO</th>
+              <th className="px-4 py-4 text-[9px] font-black text-neutral-gray uppercase tracking-widest">Status</th>
+              <th className="px-4 py-4 text-[9px] font-black text-neutral-gray uppercase tracking-widest text-right">Actions</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-50 text-xs">
-            {employees
-              .filter(emp => selectedSite === "all" || (emp as any).site === selectedSite)
-              .filter(emp => selectedUnit === "all" || (emp as any).unit === selectedUnit)
-              .filter(emp => selectedProject === "all" || (emp as any).project === selectedProject)
-              .map((emp) => (
-              <tr key={emp.id} className="hover:bg-gray-50/50 transition-colors group">
-                <td className="px-6 py-5">
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center font-bold text-[10px] text-neutral-gray group-hover:border-active-red transition-colors">
-                      {emp.name.split(' ').map(n => n[0]).join('')}
-                    </div>
-                    <div>
-                      <p className="font-bold text-black">{emp.name}</p>
-                      <p className="text-[10px] text-neutral-gray uppercase tracking-tighter mt-0.5">{emp.id}</p>
-                    </div>
-                  </div>
-                </td>
-                <td className="px-6 py-5">
-                  <div className="flex items-center gap-2">
-                    <Briefcase className="w-3 h-3 text-neutral-gray opacity-40" />
-                    <span className="font-medium text-black whitespace-nowrap">{emp.role}</span>
-                  </div>
-                </td>
-                <td className="px-6 py-5">
-                  <div className="flex justify-center">
-                    <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest ${
-                      emp.status === 'Active' ? 'bg-green-50 text-green-600' : 
-                      emp.status === 'On Leave' ? 'bg-amber-50 text-amber-600' : 'bg-gray-100 text-neutral-gray'
-                    }`}>
-                      {emp.status}
-                    </span>
-                  </div>
-                </td>
-                <td className="px-6 py-5 font-bold text-neutral-gray whitespace-nowrap">
-                  {emp.joinDate}
-                </td>
-                <td className="px-6 py-5 text-right">
-                  <div className="flex items-center justify-end gap-2">
-                    <button className="p-1.5 text-neutral-gray hover:text-black transition-colors"><Mail className="w-4 h-4" /></button>
-                    <button className="p-1.5 text-neutral-gray hover:text-black transition-colors"><MoreHorizontal className="w-4 h-4" /></button>
+          <tbody className="divide-y divide-gray-50 text-[10px]">
+            {isLoading ? (
+              <tr>
+                <td colSpan={25} className="px-6 py-12 text-center">
+                  <div className="flex flex-col items-center justify-center gap-3">
+                    <RefreshCw className="w-8 h-8 text-neutral-gray animate-spin opacity-20" />
+                    <p className="text-xs font-bold text-neutral-gray lowercase tracking-widest">connecting to database...</p>
                   </div>
                 </td>
               </tr>
-            ))}
+            ) : fetchError ? (
+              <tr>
+                <td colSpan={25} className="px-6 py-12 text-center">
+                  <div className="flex flex-col items-center justify-center gap-3">
+                    <AlertCircle className="w-8 h-8 text-active-red opacity-40" />
+                    <p className="text-xs font-bold text-active-red lowercase tracking-widest">error: {fetchError}</p>
+                    {fetchError.includes("schema cache") ? (
+                      <div className="text-[10px] text-neutral-gray max-w-md mx-auto space-y-1">
+                        <p>Supabase cannot find the 'employees' table. If you just created it:</p>
+                        <ol className="list-decimal text-left ml-5 mt-2 space-y-1 text-black font-medium">
+                          <li>Go to your Supabase Dashboard</li>
+                          <li>Open API Settings (Project Settings -&gt; API)</li>
+                          <li>Click <strong>"Reload Schema Cache"</strong></li>
+                          <li>Ensure you used the correct project URL and Anon Key in your .env variables.</li>
+                        </ol>
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-neutral-gray max-w-md mx-auto">Please check your Supabase configuration and ensure the 'employees' table exists and RLS policies are set.</p>
+                    )}
+                    <button onClick={loadEmployees} className="mt-2 text-[9px] font-black bg-gray-100 px-4 py-2 rounded-lg hover:bg-gray-200 uppercase">Retry Connection</button>
+                  </div>
+                </td>
+              </tr>
+            ) : employees.length === 0 ? (
+              <tr>
+                <td colSpan={25} className="px-6 py-12 text-center">
+                  <div className="flex flex-col items-center justify-center gap-3">
+                    <UserMinus className="w-8 h-8 text-neutral-gray opacity-20" />
+                    <p className="text-xs font-bold text-neutral-gray lowercase tracking-widest">no employee data found</p>
+                    <button onClick={() => setIsFormOpen(true)} className="mt-2 text-[10px] font-black bg-black text-white px-6 py-2.5 rounded-xl hover:bg-zinc-800 uppercase tracking-widest transition-all">Add First Employee</button>
+                  </div>
+                </td>
+              </tr>
+            ) : (
+              employees
+                .filter(emp => selectedLocation === "all" || (emp as any).building_location === selectedLocation)
+                .filter(emp => selectedOPG === "all" || (emp as any).opg === selectedOPG)
+                .filter(emp => selectedProject === "all" || (emp as any).project === selectedProject)
+                .map((emp) => (
+                <tr key={emp.id} className="hover:bg-gray-50/50 transition-colors group">
+                <td className="px-4 py-3 font-bold text-black">{emp.opg}</td>
+                <td className="px-4 py-3 font-bold text-black">{emp.project}</td>
+                <td className="px-4 py-3 text-neutral-gray font-medium">{emp.position}</td>
+                <td className="px-4 py-3 text-neutral-gray font-medium">{emp.channel}</td>
+                <td className="px-4 py-3 text-neutral-gray font-medium">{emp.skill}</td>
+                <td className="px-4 py-3 font-bold text-black">{emp.nip}</td>
+                <td className="px-4 py-3 font-bold text-black">{emp.name}</td>
+                <td className="px-4 py-3 text-neutral-gray">{emp.team_leader_name}</td>
+                <td className="px-4 py-3 text-neutral-gray">{emp.supervisor_name}</td>
+                <td className="px-4 py-3 text-blue-600 font-medium">{emp.email}</td>
+                <td className="px-4 py-3 text-neutral-gray">{emp.gender}</td>
+                <td className="px-4 py-3 text-neutral-gray">{emp.training_batch}</td>
+                <td className="px-4 py-3">
+                  <span className="px-2 py-0.5 rounded-full bg-gray-100 font-bold text-[9px]">{emp.hire_status}</span>
+                </td>
+                <td className="px-4 py-3 font-medium text-neutral-gray">{emp.join_date_project_live}</td>
+                <td className="px-4 py-3 font-medium text-neutral-gray">{emp.join_date_tcid}</td>
+                <td className="px-4 py-3 font-bold text-black">{emp.years_of_service}</td>
+                <td className="px-4 py-3 text-neutral-gray">{emp.id_card}</td>
+                <td className="px-4 py-3 text-neutral-gray">{emp.access_card_number}</td>
+                <td className="px-4 py-3 text-neutral-gray">{emp.building_location}</td>
+                <td className="px-4 py-3 text-neutral-gray italic">{emp.remarks}</td>
+                <td className="px-4 py-3 text-neutral-gray">{emp.operational_manager}</td>
+                <td className="px-4 py-3 text-neutral-gray">{emp.unit_manager}</td>
+                <td className="px-4 py-3 text-neutral-gray">{emp.sto}</td>
+                <td className="px-4 py-3">
+                  <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-widest ${
+                    emp.status === 'Active' ? 'bg-green-50 text-green-600' : 
+                    emp.status === 'On Leave' ? 'bg-amber-50 text-amber-600' : 'bg-gray-100 text-neutral-gray'
+                  }`}>
+                    {emp.status}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-right">
+                  <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button onClick={() => handleEdit(emp)} className="p-1.5 text-neutral-gray hover:text-black transition-colors"><Edit2 className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => handleDelete(emp.id)} className="p-1.5 text-neutral-gray hover:text-active-red transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                  </div>
+                </td>
+              </tr>
+            )))}
           </tbody>
         </table>
       </div>
@@ -371,48 +567,214 @@ export default function HCManagementModule({ onBack }: HCManagementModuleProps) 
               <button onClick={() => setIsFormOpen(false)} className="p-2 hover:bg-gray-100 rounded-full transition-colors">
                 <X className="w-5 h-5 text-neutral-gray" />
               </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            </div>            <form onSubmit={handleSubmit} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Full Name</label>
+                  <label className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest ml-1">OPG / Entity</label>
+                  <input 
+                    value={formData.opg}
+                    onChange={e => setFormData({ ...formData, opg: e.target.value })}
+                    className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[11px] font-bold focus:ring-1 focus:ring-black outline-none transition-all"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Project</label>
+                  <input 
+                    value={formData.project}
+                    onChange={e => setFormData({ ...formData, project: e.target.value })}
+                    className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[11px] font-bold focus:ring-1 focus:ring-black outline-none transition-all"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Position</label>
+                  <input 
+                    value={formData.position}
+                    onChange={e => setFormData({ ...formData, position: e.target.value })}
+                    className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[11px] font-bold focus:ring-1 focus:ring-black outline-none transition-all"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Channel</label>
+                  <input 
+                    value={formData.channel}
+                    onChange={e => setFormData({ ...formData, channel: e.target.value })}
+                    className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[11px] font-bold focus:ring-1 focus:ring-black outline-none transition-all"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Skill</label>
+                  <input 
+                    value={formData.skill}
+                    onChange={e => setFormData({ ...formData, skill: e.target.value })}
+                    className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[11px] font-bold focus:ring-1 focus:ring-black outline-none transition-all"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest ml-1">NIP (Unique)</label>
+                  <input 
+                    required
+                    value={formData.nip}
+                    onChange={e => setFormData({ ...formData, nip: e.target.value })}
+                    className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[11px] font-bold focus:ring-1 focus:ring-black outline-none transition-all"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Name</label>
                   <input 
                     required
                     value={formData.name}
                     onChange={e => setFormData({ ...formData, name: e.target.value })}
                     className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[11px] font-bold focus:ring-1 focus:ring-black outline-none transition-all"
-                    placeholder="e.g. John Doe"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Corporate Email</label>
+                  <label className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Team Leader Name</label>
+                  <input 
+                    value={formData.team_leader_name}
+                    onChange={e => setFormData({ ...formData, team_leader_name: e.target.value })}
+                    className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[11px] font-bold focus:ring-1 focus:ring-black outline-none transition-all"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Supervisor Name</label>
+                  <input 
+                    value={formData.supervisor_name}
+                    onChange={e => setFormData({ ...formData, supervisor_name: e.target.value })}
+                    className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[11px] font-bold focus:ring-1 focus:ring-black outline-none transition-all"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Email</label>
                   <input 
                     required
                     type="email"
                     value={formData.email}
                     onChange={e => setFormData({ ...formData, email: e.target.value })}
                     className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[11px] font-bold focus:ring-1 focus:ring-black outline-none transition-all"
-                    placeholder="name@transforce.com"
                   />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Assigned Role</label>
+                  <label className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Gender (Male/Female)</label>
                   <select 
-                    value={formData.role}
-                    onChange={e => setFormData({ ...formData, role: e.target.value })}
+                    value={formData.gender}
+                    onChange={e => setFormData({ ...formData, gender: e.target.value })}
                     className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[11px] font-bold uppercase focus:ring-1 focus:ring-black outline-none transition-all"
                   >
-                    <option value="">Select Role</option>
-                    <option value="Ops Lead">Ops Lead</option>
-                    <option value="Sr. Analyst">Sr. Analyst</option>
-                    <option value="Support Spec">Support Spec</option>
-                    <option value="QC Engineer">QC Engineer</option>
-                    <option value="Wfm Manager">Wfm Manager</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Current Status</label>
+                  <label className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Training Batch</label>
+                  <input 
+                    value={formData.training_batch}
+                    onChange={e => setFormData({ ...formData, training_batch: e.target.value })}
+                    className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[11px] font-bold focus:ring-1 focus:ring-black outline-none transition-all"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Hire Status</label>
+                  <select 
+                    value={formData.hire_status}
+                    onChange={e => setFormData({ ...formData, hire_status: e.target.value })}
+                    className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[11px] font-bold uppercase focus:ring-1 focus:ring-black outline-none transition-all"
+                  >
+                    <option value="Probation">Probation</option>
+                    <option value="Contract">Contract</option>
+                    <option value="Permanent">Permanent</option>
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Join Date (Project Live)</label>
+                  <input 
+                    type="date"
+                    value={formData.join_date_project_live}
+                    onChange={e => setFormData({ ...formData, join_date_project_live: e.target.value })}
+                    className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[11px] font-bold uppercase focus:ring-1 focus:ring-black outline-none transition-all"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Join Date (TCID)</label>
+                  <input 
+                    type="date"
+                    value={formData.join_date_tcid}
+                    onChange={e => setFormData({ ...formData, join_date_tcid: e.target.value })}
+                    className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[11px] font-bold uppercase focus:ring-1 focus:ring-black outline-none transition-all"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Years of Service</label>
+                  <input 
+                    value={formData.years_of_service}
+                    onChange={e => setFormData({ ...formData, years_of_service: e.target.value })}
+                    className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[11px] font-bold focus:ring-1 focus:ring-black outline-none transition-all"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest ml-1">ID Card</label>
+                  <input 
+                    value={formData.id_card}
+                    onChange={e => setFormData({ ...formData, id_card: e.target.value })}
+                    className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[11px] font-bold focus:ring-1 focus:ring-black outline-none transition-all"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Access Card Number</label>
+                  <input 
+                    value={formData.access_card_number}
+                    onChange={e => setFormData({ ...formData, access_card_number: e.target.value })}
+                    className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[11px] font-bold focus:ring-1 focus:ring-black outline-none transition-all"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Building Location</label>
+                  <input 
+                    value={formData.building_location}
+                    onChange={e => setFormData({ ...formData, building_location: e.target.value })}
+                    className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[11px] font-bold focus:ring-1 focus:ring-black outline-none transition-all"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Remarks</label>
+                  <input 
+                    value={formData.remarks}
+                    onChange={e => setFormData({ ...formData, remarks: e.target.value })}
+                    className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[11px] font-bold focus:ring-1 focus:ring-black outline-none transition-all"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Operational Manager</label>
+                  <input 
+                    value={formData.operational_manager}
+                    onChange={e => setFormData({ ...formData, operational_manager: e.target.value })}
+                    className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[11px] font-bold focus:ring-1 focus:ring-black outline-none transition-all"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Unit Manager</label>
+                  <input 
+                    value={formData.unit_manager}
+                    onChange={e => setFormData({ ...formData, unit_manager: e.target.value })}
+                    className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[11px] font-bold focus:ring-1 focus:ring-black outline-none transition-all"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest ml-1">STO</label>
+                  <input 
+                    value={formData.sto}
+                    onChange={e => setFormData({ ...formData, sto: e.target.value })}
+                    className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[11px] font-bold focus:ring-1 focus:ring-black outline-none transition-all"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Status</label>
                   <select 
                     value={formData.status}
                     onChange={e => setFormData({ ...formData, status: e.target.value })}
@@ -423,23 +785,16 @@ export default function HCManagementModule({ onBack }: HCManagementModuleProps) 
                     <option value="On Leave">On Leave</option>
                   </select>
                 </div>
-                <div className="space-y-2">
-                  <label className="text-[10px] font-bold text-neutral-gray uppercase tracking-widest ml-1">Enrollment Date</label>
-                  <input 
-                    type="date"
-                    value={formData.joinDate}
-                    onChange={e => setFormData({ ...formData, joinDate: e.target.value })}
-                    className="w-full bg-gray-50 border border-gray-100 rounded-xl px-4 py-3 text-[11px] font-bold uppercase focus:ring-1 focus:ring-black outline-none transition-all"
-                  />
-                </div>
               </div>
 
               <div className="pt-6 border-t border-gray-50 flex gap-3">
                 <button 
                   type="submit"
-                  className="flex-1 bg-black text-white hover:bg-active-red py-4 rounded-xl text-[11px] font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2"
+                  disabled={isLoading}
+                  className="flex-1 bg-black text-white hover:bg-active-red py-4 rounded-xl text-[11px] font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
                 >
-                  <Save className="w-4 h-4" /> {editingEmployee ? 'Commit Changes' : 'Initialize Identity'}
+                  {isLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} 
+                  {editingEmployee ? 'Commit Changes' : 'Initialize Identity'}
                 </button>
               </div>
             </form>
@@ -466,60 +821,71 @@ export default function HCManagementModule({ onBack }: HCManagementModuleProps) 
 
             <div className="overflow-x-auto">
               <table className="w-full text-left">
-                <thead className="bg-gray-50/50">
+              <thead>
+                <tr className="bg-gray-50/50">
+                  <th className="px-6 py-4 text-[9px] font-bold text-neutral-gray uppercase tracking-widest">NIP & Name</th>
+                  <th className="px-6 py-4 text-[9px] font-bold text-neutral-gray uppercase tracking-widest">Project</th>
+                  <th className="px-6 py-4 text-[9px] font-bold text-neutral-gray uppercase tracking-widest">Position</th>
+                  <th className="px-6 py-4 text-[9px] font-bold text-neutral-gray uppercase tracking-widest">Status</th>
+                  <th className="px-6 py-4 text-[9px] font-bold text-neutral-gray uppercase tracking-widest text-right">Operations</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50 relative min-h-[100px]">
+                {isLoading && employees.length === 0 && (
                   <tr>
-                    <th className="px-6 py-4 text-[9px] font-bold text-neutral-gray uppercase tracking-widest">User ID & Name</th>
-                    <th className="px-6 py-4 text-[9px] font-bold text-neutral-gray uppercase tracking-widest">Role</th>
-                    <th className="px-6 py-4 text-[9px] font-bold text-neutral-gray uppercase tracking-widest">Status</th>
-                    <th className="px-6 py-4 text-[9px] font-bold text-neutral-gray uppercase tracking-widest text-right">Operations</th>
+                    <td colSpan={4} className="px-6 py-12 text-center">
+                      <RefreshCw className="w-6 h-6 animate-spin mx-auto text-neutral-gray/20" />
+                    </td>
                   </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {employees
-                    .filter(emp => selectedSite === "all" || (emp as any).site === selectedSite)
-                    .filter(emp => selectedUnit === "all" || (emp as any).unit === selectedUnit)
-                    .filter(emp => selectedProject === "all" || (emp as any).project === selectedProject)
-                    .map((emp) => (
-                    <tr key={emp.id} className="hover:bg-gray-50/30 transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center font-bold text-[10px] text-neutral-gray">
-                            {emp.name.split(' ').map((n: string) => n[0]).join('')}
-                          </div>
-                          <div>
-                            <p className="text-xs font-bold text-black">{emp.name}</p>
-                            <p className="text-[9px] text-neutral-gray font-medium uppercase tracking-tighter">{emp.id}</p>
-                          </div>
+                )}
+                {employees
+                  .filter(emp => selectedLocation === "all" || (emp as any).building_location === selectedLocation)
+                  .filter(emp => selectedOPG === "all" || (emp as any).opg === selectedOPG)
+                  .filter(emp => selectedProject === "all" || (emp as any).project === selectedProject)
+                  .map((emp) => (
+                  <tr key={emp.id} className="hover:bg-gray-50/30 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-gray-100 flex items-center justify-center font-bold text-[10px] text-neutral-gray">
+                          {emp.name.split(' ').map((n: string) => n[0]).join('')}
                         </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="text-[10px] font-bold text-neutral-gray uppercase bg-gray-100 px-2 py-0.5 rounded">{emp.role}</span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-1.5">
-                          <div className={`w-1.5 h-1.5 rounded-full ${emp.status === 'Active' ? 'bg-green-500' : emp.status === 'On Leave' ? 'bg-amber-500' : 'bg-gray-300'}`} />
-                          <span className="text-[10px] font-bold text-black uppercase">{emp.status}</span>
+                        <div>
+                          <p className="text-xs font-bold text-black">{emp.name}</p>
+                          <p className="text-[9px] text-neutral-gray font-medium uppercase tracking-tighter">{emp.nip}</p>
                         </div>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button 
-                            onClick={() => handleEdit(emp)}
-                            className="p-2 text-neutral-gray hover:text-black hover:bg-gray-100 rounded-lg transition-all"
-                          >
-                            <Edit2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button 
-                            onClick={() => handleDelete(emp.id)}
-                            className="p-2 text-neutral-gray hover:text-active-red hover:bg-red-50 rounded-lg transition-all"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-[10px] font-bold text-neutral-gray uppercase bg-gray-100 px-2 py-0.5 rounded">{emp.project}</span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-[10px] font-bold text-black uppercase">{emp.position}</span>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center gap-1.5">
+                        <div className={`w-1.5 h-1.5 rounded-full ${emp.status === 'Active' ? 'bg-green-500' : emp.status === 'On Leave' ? 'bg-amber-500' : 'bg-gray-300'}`} />
+                        <span className="text-[10px] font-bold text-black uppercase">{emp.status}</span>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <button 
+                          onClick={() => handleEdit(emp)}
+                          className="p-2 text-neutral-gray hover:text-black hover:bg-gray-100 rounded-lg transition-all"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button 
+                          onClick={() => handleDelete(emp.id)}
+                          className="p-2 text-neutral-gray hover:text-active-red hover:bg-red-50 rounded-lg transition-all"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
               </table>
             </div>
           </motion.div>
@@ -534,6 +900,25 @@ export default function HCManagementModule({ onBack }: HCManagementModuleProps) 
       animate={{ opacity: 1, scale: 1 }} 
       className="space-y-6 sm:space-y-8 -mt-2 sm:-mt-4"
     >
+      {showConfigWarning && (
+        <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4 flex items-start gap-4">
+          <div className="p-2 bg-amber-100 rounded-lg">
+            <AlertCircle className="w-5 h-5 text-amber-600" />
+          </div>
+          <div className="flex-1">
+            <h4 className="text-xs font-black text-amber-900 uppercase tracking-tight">Supabase Not Configured</h4>
+            <p className="text-[10px] text-amber-700 font-medium leading-relaxed mt-1">
+              Data is currently not loading because the Supabase credentials are not set. Please add <span className="font-bold">VITE_SUPABASE_URL</span> and <span className="font-bold">VITE_SUPABASE_ANON_KEY</span> to your environment.
+            </p>
+            <button 
+              onClick={() => setShowConfigWarning(false)}
+              className="mt-3 text-[9px] font-black uppercase text-amber-900 hover:underline transition-all"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
       <div className="px-1">
         <div className="flex flex-col p-3 bg-white border border-gray-100 rounded-2xl shadow-sm">
           {/* Header Filters - All Parallel */}
@@ -595,26 +980,26 @@ export default function HCManagementModule({ onBack }: HCManagementModuleProps) 
             <div className="h-4 w-px bg-gray-100 hidden lg:block" />
 
             <div className="flex items-center gap-3">
-              <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest whitespace-nowrap">Site:</span>
+              <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest whitespace-nowrap">Location:</span>
               <select 
-                value={selectedSite}
-                onChange={(e) => setSelectedSite(e.target.value)}
+                value={selectedLocation}
+                onChange={(e) => setSelectedLocation(e.target.value)}
                 className="bg-gray-50 border border-gray-100 rounded-xl px-3 py-1.5 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-1 focus:ring-black/10 min-w-[120px]"
               >
-                <option value="all">ALL SITES</option>
-                {SITES.map(s => <option key={s} value={s}>{s.toUpperCase()}</option>)}
+                <option value="all">ALL LOCATIONS</option>
+                <option value="Menara Transcosmos">MENARA TRANSCOSMOS</option>
               </select>
             </div>
 
             <div className="flex items-center gap-3">
-              <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest whitespace-nowrap">Unit:</span>
+              <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest whitespace-nowrap">OPG:</span>
               <select 
-                value={selectedUnit}
-                onChange={(e) => setSelectedUnit(e.target.value)}
+                value={selectedOPG}
+                onChange={(e) => setSelectedOPG(e.target.value)}
                 className="bg-gray-50 border border-gray-100 rounded-xl px-3 py-1.5 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-1 focus:ring-black/10 min-w-[120px]"
               >
-                <option value="all">ALL UNITS</option>
-                {UNITS.map(u => <option key={u} value={u}>{u.toUpperCase()}</option>)}
+                <option value="all">ALL OPG Entities</option>
+                <option value="TCID Jakarta">TCID JAKARTA</option>
               </select>
             </div>
             
