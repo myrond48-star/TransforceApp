@@ -1815,6 +1815,96 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
           }
       });
       
+      // PASS 6: Interval-Based Swap Fine-Tuning
+      for (let iter = 0; iter < 3; iter++) {
+          days.forEach((d, dayIdx) => {
+              // 1. Calculate current gaps for this day
+              const currentGaps: number[] = slots.map(s => {
+                  let schedCount = 0;
+                  roster.forEach(r => {
+                      const code = r.roster[d];
+                      if (code && code !== 'OFF' && compositionShifts[code]) {
+                          if (isSlotInShift(s, compositionShifts[code].start, compositionShifts[code].end)) {
+                              schedCount++;
+                          }
+                      }
+                  });
+                  return schedCount - (histRequirements[d]?.[s] || 0);
+              });
+              
+              roster.forEach(agentRoster => {
+                  const currentShift = agentRoster.roster[d];
+                  if (!currentShift || currentShift === 'OFF') return; // Only swap existing working days to another shift
+                  
+                  const agent = agentsToSchedule.find(a => a.id === agentRoster.empId);
+                  if (!agent) return;
+
+                  let bestShift = currentShift;
+                  let bestScore = 0;
+                  
+                  shiftCodesSorted.forEach(candidateShift => {
+                      if (candidateShift === currentShift) return;
+                      // Constraints Check
+                      if (candidateShift.toUpperCase() === 'M1' || candidateShift.toUpperCase() === 'S7') {
+                          const gender = (agent.gender || '').toUpperCase().trim();
+                          if (gender !== 'L' && gender !== 'MALE' && gender !== 'LAKI-LAKI' && gender !== 'PRIA') return;
+                          const tempMsg = { ...agentRoster.roster, [d]: candidateShift };
+                          if (!checkMaxConsecM1S7(tempMsg, 4)) return;
+                      }
+                      const cStart = parseTime(compositionShifts[candidateShift].start);
+                      const cEnd = getShiftEnd(compositionShifts[candidateShift].start, compositionShifts[candidateShift].end);
+                      
+                      if (dayIdx > 0) {
+                          const prev = agentRoster.roster[days[dayIdx-1]];
+                          if (prev && prev !== 'OFF' && compositionShifts[prev]) {
+                             const pEnd = getShiftEnd(compositionShifts[prev].start, compositionShifts[prev].end);
+                             if ((cStart + 24 - pEnd) < 10) return;
+                          }
+                      }
+                      if (dayIdx < days.length - 1) {
+                          const next = agentRoster.roster[days[dayIdx+1]];
+                          if (next && next !== 'OFF' && compositionShifts[next]) {
+                             const nStart = parseTime(compositionShifts[next].start);
+                             if ((nStart + 24 - cEnd) < 10) return;
+                          }
+                      }
+                      
+                      // Score logic
+                      let scoreImprovement = 0;
+                      slots.forEach((s, sIdx) => {
+                          const gap = currentGaps[sIdx];
+                          const inCurrent = isSlotInShift(s, compositionShifts[currentShift].start, compositionShifts[currentShift].end);
+                          const inCandidate = isSlotInShift(s, compositionShifts[candidateShift].start, compositionShifts[candidateShift].end);
+                          
+                          if (inCurrent && !inCandidate) {
+                              if (gap <= 0) scoreImprovement -= 10;
+                              else if (gap > 2) scoreImprovement += 5;
+                          } else if (!inCurrent && inCandidate) {
+                              if (gap < 0) scoreImprovement += 10;
+                              else if (gap >= 2) scoreImprovement -= 5;
+                          }
+                      });
+                      
+                      if (scoreImprovement > bestScore) {
+                          bestScore = scoreImprovement;
+                          bestShift = candidateShift;
+                      }
+                  });
+                  
+                  if (bestShift !== currentShift) {
+                      agentRoster.roster[d] = bestShift;
+                      // Instantly update currentGaps for the next agent
+                      slots.forEach((s, sIdx) => {
+                          const inCurrent = isSlotInShift(s, compositionShifts[currentShift].start, compositionShifts[currentShift].end);
+                          const inCandidate = isSlotInShift(s, compositionShifts[bestShift].start, compositionShifts[bestShift].end);
+                          if (inCurrent && !inCandidate) currentGaps[sIdx]--;
+                          else if (!inCurrent && inCandidate) currentGaps[sIdx]++;
+                      });
+                  }
+              });
+          });
+      }
+      
       setTimeout(() => {
         setGeneratedRoster(roster);
         setIsGeneratingRoster(false);
