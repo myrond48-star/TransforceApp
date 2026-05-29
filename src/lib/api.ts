@@ -186,3 +186,166 @@ export async function deleteEmployee(id: string | number) {
     throw err;
   }
 }
+
+/**
+ * Separate Workforce Database Helpers
+ */
+export async function fetchWorkforce() {
+  try {
+    console.log("Fetching workforce from Supabase 'workforce' table...");
+    const { data, error } = await supabase
+      .from('workforce')
+      .select('*')
+      .order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    return data || [];
+  } catch (err: any) {
+    console.warn("Could not query 'workforce' table on Supabase (maybe table not created yet). Using local fallback:", err.message);
+    throw err;
+  }
+}
+
+export async function fetchUniqueProjects() {
+  try {
+    const { data, error } = await supabase
+      .from('workforce')
+      .select('project');
+    if (error) throw error;
+    if (data && data.length > 0) {
+      const projects = Array.from(new Set(data.map((r: any) => r.project).filter(Boolean))) as string[];
+      return projects.filter(p => typeof p === 'string' && p.trim() !== "").sort();
+    }
+    return [];
+  } catch (err: any) {
+    console.warn("Could not fetch unique projects from database:", err.message);
+    return [];
+  }
+}
+
+export async function createWorkforceRecord(record: any) {
+  try {
+    const { data, error } = await supabase
+      .from('workforce')
+      .insert([record])
+      .select();
+    
+    if (error) throw error;
+    return data?.[0];
+  } catch (err: any) {
+    console.warn("Could not insert into 'workforce' table on Supabase. Using local fallback:", err.message);
+    throw err;
+  }
+}
+
+export async function deleteWorkforceRecord(id: string | number) {
+  try {
+    const { error } = await supabase
+      .from('workforce')
+      .delete()
+      .eq('id', id);
+    
+    if (error) throw error;
+    return true;
+  } catch (err: any) {
+    console.warn("Could not delete from 'workforce' table on Supabase. Using local fallback:", err.message);
+    throw err;
+  }
+}
+
+/**
+ * Interval Requirements Database Helpers
+ */
+export async function fetchIntervalRequirements(startDate: string, endDate: string, intervalType: string) {
+  try {
+    console.log(`Fetching interval requirements (${intervalType}) from Supabase: ${startDate} to ${endDate}...`);
+    const { data, error } = await supabase
+      .from('interval_requirements')
+      .select('*')
+      .gte('date', startDate)
+      .lte('date', endDate)
+      .eq('interval_type', intervalType);
+    
+    if (error) throw error;
+    return data || [];
+  } catch (err: any) {
+    console.warn("Could not query 'interval_requirements' table. Using local fallback:", err.message);
+    throw err;
+  }
+}
+
+export async function upsertIntervalRequirements(records: any[]) {
+  try {
+    if (!records || records.length === 0) return [];
+    console.log(`Upserting ${records.length} interval requirements into Supabase...`);
+    const { data, error } = await supabase
+      .from('interval_requirements')
+      .upsert(records, { onConflict: 'date,time_slot,interval_type' })
+      .select();
+    
+    if (error) throw error;
+    return data || [];
+  } catch (err: any) {
+    console.warn("Could not upsert into 'interval_requirements' table. Using local fallback:", err.message);
+    throw err;
+  }
+}
+
+/**
+ * Master Shifts Database Helpers
+ */
+export async function fetchMasterShifts(project: string) {
+  try {
+    console.log(`Fetching master shifts for project: ${project} from Supabase...`);
+    const { data, error } = await supabase
+      .from('master_shifts')
+      .select('*')
+      .eq('project', project);
+    
+    if (error) throw error;
+    return data || [];
+  } catch (err: any) {
+    console.warn(`Could not query 'master_shifts' table. Using local fallback for project ${project}:`, err.message);
+    throw err;
+  }
+}
+
+export async function upsertMasterShifts(project: string, records: any[]) {
+  try {
+    console.log(`Upserting ${records.length} master shifts for project: ${project} to Supabase...`);
+    
+    // First, clear existing shifts for this project to keep the list synchronized (deletions propagate)
+    const { error: deleteError } = await supabase
+      .from('master_shifts')
+      .delete()
+      .eq('project', project);
+    
+    if (deleteError) {
+      console.warn("Error clearing old shifts:", deleteError.message);
+    }
+
+    if (records.length === 0) return [];
+
+    const formattedRecords = records.map(r => ({
+      project,
+      code: r.code,
+      start_time: r.s,
+      end_time: r.e,
+      weight: r.w || 1
+    }));
+
+    const { data, error } = await supabase
+      .from('master_shifts')
+      .insert(formattedRecords)
+      .select();
+    
+    if (error) throw error;
+    return data || [];
+  } catch (err: any) {
+    console.warn("Could not save to 'master_shifts' table:", err.message);
+    throw err;
+  }
+}
+
+
+

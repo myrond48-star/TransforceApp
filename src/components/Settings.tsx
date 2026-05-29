@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../lib/store';
 import { format } from 'date-fns';
-import { checkConnection, updateDbConfig } from '../lib/api';
+import { checkConnection, updateDbConfig, fetchMasterShifts, upsertMasterShifts, fetchUniqueProjects } from '../lib/api';
 import { 
   Settings as SettingsIcon, 
   Database, 
@@ -65,6 +65,64 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
 
   // Shift State
   const [shifts, setShifts] = useState(Object.entries(settings.shifts).map(([k, v]) => ({ code: k, ...(v as any) })));
+  const [selectedShiftProject, setSelectedShiftProject] = useState("Project Alpha");
+  const [isLoadingShifts, setIsLoadingShifts] = useState(false);
+  const [PROJECTS, setPROJECTS] = useState<string[]>(["Project Alpha", "Project Beta", "Customer Care", "Technical Support", "VIP Concierge"]);
+
+  // Fetch unique project list dynamically on mount
+  React.useEffect(() => {
+    const fetchProjList = async () => {
+      try {
+        const pList = await fetchUniqueProjects();
+        if (pList && pList.length > 0) {
+          setPROJECTS(pList);
+          // Auto select first dynamic project if current one is not in database pool
+          if (!pList.includes(selectedShiftProject)) {
+            setSelectedShiftProject(pList[0]);
+          }
+        }
+      } catch (err) {
+        console.warn("Could not load database project list, using defaults.", err);
+      }
+    };
+    fetchProjList();
+  }, []);
+
+  // Fetch shifts for selected project
+  React.useEffect(() => {
+    let active = true;
+    if (activeTab === 'shift') {
+      const loadShifts = async () => {
+        setIsLoadingShifts(true);
+        try {
+          const fetched = await fetchMasterShifts(selectedShiftProject);
+          if (active) {
+            if (fetched && fetched.length > 0) {
+              const mapped = fetched.map((s: any) => ({
+                code: s.code,
+                s: s.start_time,
+                e: s.end_time,
+                w: s.weight || 1
+              }));
+              setShifts(mapped);
+            } else {
+              // Fallback default shifts depending on project
+              const defaultShifts = Object.entries(settings.shifts).map(([k, v]) => ({ code: k, ...(v as any) }));
+              setShifts(defaultShifts);
+            }
+          }
+        } catch (error) {
+          console.error("Failed to load project master shifts from Supabase:", error);
+        } finally {
+          if (active) setIsLoadingShifts(false);
+        }
+      };
+      loadShifts();
+    }
+    return () => {
+      active = false;
+    };
+  }, [activeTab, selectedShiftProject]);
 
   // Holiday State
   const [holidays, setHolidays] = useState(Object.entries(settings.holidays).map(([k, v]) => ({ date: k, desc: v })));
@@ -168,7 +226,7 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
 
       console.log("Saving new configuration:", { url: cleanUrl });
       
-      // 2. Perform the update - this writes to localStorage
+      // 2. Perform the update - this writes to localStorage and swaps the active client instance
       await updateDbConfig(cleanUrl, cleanKey);
       
       // 3. Update local state to reflect cleaned values
@@ -176,11 +234,9 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
       
       showStatus("Configuration committed! Synchronizing nodes... ✅");
       
-      // 4. Force a hard reload to ensure all modules re-initialize with new singleton
-      setTimeout(() => {
-        console.log("Performing system reload...");
-        window.location.replace(window.location.origin + window.location.pathname + '?config_updated=true');
-      }, 1000);
+      // No reload needed; the Supabase client replaces itself in memory
+      setIsSavingDb(false);
+      setSaveStatus(null);
       
     } catch (err: any) {
       console.error("Save error:", err);
@@ -275,19 +331,41 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
     showStatus("API Settings saved successfully! ✅");
   };
 
-  const handleSaveShifts = () => {
+  const handleSaveShifts = async () => {
+    setIsPushing(true);
     const newShifts: any = {};
+    const shiftsToUpload: any[] = [];
+    
     shifts.forEach(s => {
       if (s.code) {
         const start = normalizeTime(s.s);
         const end = normalizeTime(s.e);
         if (start && end) {
           newShifts[s.code] = { s: start, e: end, w: s.w };
+          shiftsToUpload.push({
+            code: s.code,
+            s: start,
+            e: end,
+            w: s.w
+          });
         }
       }
     });
-    updateSettings({ shifts: newShifts, bizRules });
-    showStatus("Shift Settings saved successfully! ✅");
+
+    try {
+      // 1. Update local settings
+      updateSettings({ shifts: newShifts, bizRules });
+
+      // 2. Save directly to Supabase master_shifts table for the selected project
+      await upsertMasterShifts(selectedShiftProject, shiftsToUpload);
+      
+      showStatus(`Shift untuk project "${selectedShiftProject}" berhasil tersimpan ke Supabase! ✅`);
+    } catch (err: any) {
+      console.error("Failed to save shifts to Supabase:", err);
+      showStatus(`Tersimpan lokal. Supabase gagal: ${err.message || 'Cek koneksi database'} ⚠️`);
+    } finally {
+      setIsPushing(false);
+    }
   };
 
   const handleSaveRoles = () => {
@@ -609,26 +687,53 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
             {activeTab === 'shift' && (
               <div className="animate-in fade-in slide-in-from-top-4 duration-300 max-w-5xl mx-auto">
                 <div className="bg-slate-50 p-6 md:p-8 rounded-[2rem] border border-slate-200 shadow-sm relative overflow-hidden">
-                   <h4 className="m-0 mb-5 text-slate-900 text-base font-black flex items-center gap-2.5 tracking-widest uppercase">
-                     <Clock size={18} className="text-rose-600" />
-                     MASTER SHIFT REGISTRY
-                   </h4>
-                   <div className="space-y-3">
-                     {shifts.map((s, i) => (
-                       <div key={i} className="flex gap-3 items-center bg-white p-4 rounded-2xl border border-slate-100 shadow-sm transition-all group">
-                         <input type="text" className="w-[80px] p-2.5 bg-slate-50 border border-slate-100 rounded-xl font-black font-mono text-[10px] text-rose-600 uppercase text-center" value={s.code} onChange={e => { const newS = [...shifts]; newS[i].code = e.target.value; setShifts(newS); }} />
-                         <input type="text" placeholder="08:00" className="flex-1 p-2.5 bg-slate-50 border border-slate-100 rounded-xl font-black text-[10px] text-center font-mono" value={s.s} onChange={e => { const newS = [...shifts]; newS[i].s = e.target.value; setShifts(newS); }} />
-                         <ArrowLeftRight size={12} className="text-slate-300 shrink-0" />
-                         <input type="text" placeholder="17:00" className="flex-1 p-2.5 bg-slate-50 border border-slate-100 rounded-xl font-black text-[10px] text-center font-mono" value={s.e} onChange={e => { const newS = [...shifts]; newS[i].e = e.target.value; setShifts(newS); }} />
-                         <button className="p-2.5 text-slate-300 hover:text-rose-600 transition-colors" onClick={() => setShifts(shifts.filter((_, idx) => idx !== i))}>
-                           <Trash2 size={16} />
-                         </button>
-                       </div>
-                     ))}
-                     <button className="w-full py-4 border-2 border-dashed border-slate-200 text-slate-400 font-black text-[10px] uppercase tracking-[0.2em] rounded-2xl hover:bg-slate-100 transition-all flex items-center justify-center gap-3" onClick={() => setShifts([...shifts, { code: '', s: '08:00', e: '17:00', w: shifts.length + 1 }])}>
-                       <Plus size={16} /> Add Shift Definition
-                     </button>
+                   <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 border-b border-slate-200 pb-5">
+                     <div>
+                       <h4 className="m-0 text-slate-900 text-base font-black flex items-center gap-2.5 tracking-widest uppercase">
+                         <Clock size={18} className="text-rose-600" />
+                         MASTER SHIFT REGISTRY
+                       </h4>
+                       <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1.5">
+                         Terkoneksi ke project pada database workforce
+                       </p>
+                     </div>
+                     <div className="flex items-center gap-2">
+                       <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Pilih Project:</span>
+                       <select
+                         className="p-2 px-3 bg-white border border-slate-200 rounded-xl text-[10px] font-black text-rose-600 uppercase tracking-widest cursor-pointer focus:ring-1 focus:ring-rose-500 outline-none"
+                         value={selectedShiftProject}
+                         onChange={(e) => setSelectedShiftProject(e.target.value)}
+                       >
+                         {PROJECTS.map((pj) => (
+                           <option key={pj} value={pj}>{pj}</option>
+                         ))}
+                       </select>
+                     </div>
                    </div>
+
+                   {isLoadingShifts ? (
+                     <div className="py-12 flex flex-col items-center justify-center gap-2">
+                       <RefreshCw size={24} className="animate-spin text-rose-600" />
+                       <span className="text-[10px] font-black text-slate-400 tracking-widest">MEMUAT SHIFT DARI SUPABASE...</span>
+                     </div>
+                   ) : (
+                     <div className="space-y-3">
+                       {shifts.map((s, i) => (
+                         <div key={i} className="flex gap-3 items-center bg-white p-4 rounded-2xl border border-slate-100 shadow-sm transition-all group">
+                           <input type="text" className="w-[80px] p-2.5 bg-slate-50 border border-slate-100 rounded-xl font-black font-mono text-[10px] text-rose-600 uppercase text-center" value={s.code} onChange={e => { const newS = [...shifts]; newS[i].code = e.target.value; setShifts(newS); }} />
+                           <input type="text" placeholder="08:00" className="flex-1 p-2.5 bg-slate-50 border border-slate-100 rounded-xl font-black text-[10px] text-center font-mono" value={s.s} onChange={e => { const newS = [...shifts]; newS[i].s = e.target.value; setShifts(newS); }} />
+                           <ArrowLeftRight size={12} className="text-slate-300 shrink-0" />
+                           <input type="text" placeholder="17:00" className="flex-1 p-2.5 bg-slate-50 border border-slate-100 rounded-xl font-black text-[10px] text-center font-mono" value={s.e} onChange={e => { const newS = [...shifts]; newS[i].e = e.target.value; setShifts(newS); }} />
+                           <button className="p-2.5 text-slate-300 hover:text-rose-600 transition-colors" onClick={() => setShifts(shifts.filter((_, idx) => idx !== i))}>
+                             <Trash2 size={16} />
+                           </button>
+                         </div>
+                       ))}
+                       <button className="w-full py-4 border-2 border-dashed border-slate-200 text-slate-400 font-black text-[10px] uppercase tracking-[0.2em] rounded-2xl hover:bg-slate-100 transition-all flex items-center justify-center gap-3" onClick={() => setShifts([...shifts, { code: '', s: '08:00', e: '17:00', w: shifts.length + 1 }])}>
+                         <Plus size={16} /> Add Shift Definition
+                       </button>
+                     </div>
+                   )}
                 </div>
               </div>
             )}
@@ -820,6 +925,168 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                   System ensures connectivity via Supabase-JS SDK. Anon key allows public access based on RLS (Row Level Security) policies defined in the portal.
                 </p>
               </div>
+            </div>
+          </div>
+
+          {/* New Guided SQL Setup Tool */}
+          <div className="mt-12 pt-8 border-t border-slate-100 space-y-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <h5 className="text-[11px] font-black uppercase tracking-wider text-slate-900 flex items-center gap-2">
+                  <FileCheck size={16} className="text-[#6366f1]" />
+                  SUPABASE SQL EDITOR SCHEMAS (MIGRATION STACK)
+                </h5>
+                <p className="text-slate-400 text-[9px] font-bold uppercase tracking-widest mt-1">
+                  Salin seluruh query SQL di bawah ini untuk membuat tabel 'workforce', 'interval_requirements', dan 'master_shifts' secara instan
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  const sqlText = `-- SQL Schema untuk 'workforce', 'interval_requirements', dan 'master_shifts' pada Supabase\n` +
+                    `-- Dashboard Supabase -> SQL Editor -> New Query -> Tempel (Paste) -> Run\n\n` +
+                    `-- 1. Buat Tabel 'workforce'\n` +
+                    `CREATE TABLE IF NOT EXISTS public.workforce (\n` +
+                    `    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,\n` +
+                    `    nip VARCHAR(255) NOT NULL,\n` +
+                    `    name VARCHAR(255) NOT NULL,\n` +
+                    `    skill VARCHAR(255) DEFAULT 'English',\n` +
+                    `    channel VARCHAR(255) DEFAULT 'Voice',\n` +
+                    `    gender VARCHAR(255) DEFAULT 'Male',\n` +
+                    `    religion VARCHAR(255) DEFAULT 'Islam',\n` +
+                    `    project VARCHAR(255) DEFAULT 'Project Alpha',\n` +
+                    `    unit VARCHAR(255) DEFAULT 'Unit A',\n` +
+                    `    site VARCHAR(255) DEFAULT 'Jakarta',\n` +
+                    `    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL\n` +
+                    `);\n\n` +
+                    `-- 2. Aktifkan RLS untuk workforce\n` +
+                    `ALTER TABLE public.workforce ENABLE ROW LEVEL SECURITY;\n\n` +
+                    `-- 3. Kebijakan RLS workforce\n` +
+                    `CREATE POLICY "Allow public read access" ON public.workforce FOR SELECT USING (true);\n` +
+                    `CREATE POLICY "Allow public insert access" ON public.workforce FOR INSERT WITH CHECK (true);\n` +
+                    `CREATE POLICY "Allow public update access" ON public.workforce FOR UPDATE USING (true) WITH CHECK (true);\n` +
+                    `CREATE POLICY "Allow public delete access" ON public.workforce FOR DELETE USING (true);\n\n` +
+                    `-- 4. Buat Tabel 'interval_requirements'\n` +
+                    `CREATE TABLE IF NOT EXISTS public.interval_requirements (\n` +
+                    `    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,\n` +
+                    `    date DATE NOT NULL,\n` +
+                    `    time_slot VARCHAR(255) NOT NULL,\n` +
+                    `    required_agents INTEGER DEFAULT 0 NOT NULL,\n` +
+                    `    interval_type VARCHAR(50) DEFAULT '1h' NOT NULL,\n` +
+                    `    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,\n` +
+                    `    CONSTRAINT unique_requirement UNIQUE (date, time_slot, interval_type)\n` +
+                    `);\n\n` +
+                    `-- 5. Aktifkan RLS untuk interval_requirements\n` +
+                    `ALTER TABLE public.interval_requirements ENABLE ROW LEVEL SECURITY;\n\n` +
+                    `-- 6. Kebijakan RLS interval_requirements\n` +
+                    `CREATE POLICY "Allow public read interval_requirements" ON public.interval_requirements FOR SELECT USING (true);\n` +
+                    `CREATE POLICY "Allow public insert interval_requirements" ON public.interval_requirements FOR INSERT WITH CHECK (true);\n` +
+                    `CREATE POLICY "Allow public update interval_requirements" ON public.interval_requirements FOR UPDATE USING (true) WITH CHECK (true);\n` +
+                    `CREATE POLICY "Allow public delete interval_requirements" ON public.interval_requirements FOR DELETE USING (true);\n\n` +
+                    `-- 7. Buat Tabel 'master_shifts' (Tabel Terpisah untuk Master Shift Registry)\n` +
+                    `CREATE TABLE IF NOT EXISTS public.master_shifts (\n` +
+                    `    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,\n` +
+                    `    project VARCHAR(255) NOT NULL,\n` +
+                    `    code VARCHAR(50) NOT NULL,\n` +
+                    `    start_time VARCHAR(10) NOT NULL,\n` +
+                    `    end_time VARCHAR(10) NOT NULL,\n` +
+                    `    weight INTEGER DEFAULT 1 NOT NULL,\n` +
+                    `    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,\n` +
+                    `    CONSTRAINT unique_project_shift_code UNIQUE (project, code)\n` +
+                    `);\n\n` +
+                    `-- 8. Aktifkan RLS untuk master_shifts\n` +
+                    `ALTER TABLE public.master_shifts ENABLE ROW LEVEL SECURITY;\n\n` +
+                    `-- 9. Kebijakan RLS master_shifts\n` +
+                    `CREATE POLICY "Allow public read master_shifts" ON public.master_shifts FOR SELECT USING (true);\n` +
+                    `CREATE POLICY "Allow public insert master_shifts" ON public.master_shifts FOR INSERT WITH CHECK (true);\n` +
+                    `CREATE POLICY "Allow public update master_shifts" ON public.master_shifts FOR UPDATE USING (true) WITH CHECK (true);\n` +
+                    `CREATE POLICY "Allow public delete master_shifts" ON public.master_shifts FOR DELETE USING (true);`;
+                  navigator.clipboard.writeText(sqlText);
+                  alert("SQL Schema berhasil disalin ke clipboard! 👍");
+                }}
+                className="px-4 py-2 bg-[#6366f1] text-white text-[9px] font-black uppercase tracking-widest rounded-xl hover:bg-[#4f46e5] transition-colors shadow-md flex items-center gap-1.5"
+              >
+                <Database size={12} /> Salin SQL Script
+              </button>
+            </div>
+
+            <div className="bg-slate-900 border border-slate-950 rounded-2xl p-5 relative font-mono text-[10px] text-slate-300 leading-relaxed overflow-x-auto max-h-[350px] space-y-4">
+              <div className="text-slate-500 font-sans border-b border-white/5 pb-2 uppercase tracking-wide flex justify-between select-none">
+                <span>Schema Migration Stack</span>
+                <span>SQL RAW</span>
+              </div>
+              <pre className="select-all">
+{`-- 1. Buat Tabel 'workforce'
+CREATE TABLE IF NOT EXISTS public.workforce (
+    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    nip VARCHAR(255) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    skill VARCHAR(255) DEFAULT 'English',
+    channel VARCHAR(255) DEFAULT 'Voice',
+    gender VARCHAR(255) DEFAULT 'Male',
+    religion VARCHAR(255) DEFAULT 'Islam',
+    project VARCHAR(255) DEFAULT 'Project Alpha',
+    unit VARCHAR(255) DEFAULT 'Unit A',
+    site VARCHAR(255) DEFAULT 'Jakarta',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 2. Aktifkan RLS (Row Level Security)
+ALTER TABLE public.workforce ENABLE ROW LEVEL SECURITY;
+
+-- 3. Kebijakan Keamanan (RLS Policies)
+CREATE POLICY "Allow public read access" ON public.workforce FOR SELECT USING (true);
+CREATE POLICY "Allow public insert access" ON public.workforce FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update access" ON public.workforce FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public delete access" ON public.workforce FOR DELETE USING (true);
+
+-- 4. Buat Tabel 'interval_requirements'
+CREATE TABLE IF NOT EXISTS public.interval_requirements (
+    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    date DATE NOT NULL,
+    time_slot VARCHAR(255) NOT NULL,
+    required_agents INTEGER DEFAULT 0 NOT NULL,
+    interval_type VARCHAR(50) DEFAULT '1h' NOT NULL, -- '15m', '30m', '1h'
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    CONSTRAINT unique_requirement UNIQUE (date, time_slot, interval_type)
+);
+
+-- 5. Aktifkan RLS
+ALTER TABLE public.interval_requirements ENABLE ROW LEVEL SECURITY;
+
+-- 6. Kebijakan Keamanan (RLS Policies)
+CREATE POLICY "Allow public read interval_requirements" ON public.interval_requirements FOR SELECT USING (true);
+CREATE POLICY "Allow public insert interval_requirements" ON public.interval_requirements FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update interval_requirements" ON public.interval_requirements FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public delete interval_requirements" ON public.interval_requirements FOR DELETE USING (true);
+
+-- 7. Buat Tabel 'master_shifts' (Tabel Terpisah untuk Master Shift Registry)
+CREATE TABLE IF NOT EXISTS public.master_shifts (
+    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
+    project VARCHAR(255) NOT NULL,
+    code VARCHAR(50) NOT NULL,
+    start_time VARCHAR(10) NOT NULL,
+    end_time VARCHAR(10) NOT NULL,
+    weight INTEGER DEFAULT 1 NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    CONSTRAINT unique_project_shift_code UNIQUE (project, code)
+);
+
+-- 8. Aktifkan RLS untuk master_shifts
+ALTER TABLE public.master_shifts ENABLE ROW LEVEL SECURITY;
+
+-- 9. Kebijakan Keamanan (RLS Policies)
+CREATE POLICY "Allow public read master_shifts" ON public.master_shifts FOR SELECT USING (true);
+CREATE POLICY "Allow public insert master_shifts" ON public.master_shifts FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update master_shifts" ON public.master_shifts FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public delete master_shifts" ON public.master_shifts FOR DELETE USING (true);`}
+              </pre>
+            </div>
+
+            <div className="p-4 bg-sky-50 border border-sky-100 rounded-2xl flex items-start gap-3">
+              <span className="text-sky-600 font-bold shrink-0 mt-0.5 font-sans">💡 Step:</span>
+              <p className="text-[10px] text-sky-950 font-bold uppercase tracking-wider leading-relaxed">
+                Silakan buka dashboard Supabase Anda di <a href="https://supabase.com" target="_blank" rel="noopener noreferrer" className="underline font-black hover:text-sky-700">supabase.com</a>, masuk ke proyek yang aktif, pilih menu <strong>SQL Editor</strong>, klik <strong>"New Query"</strong>, tempel (paste) script SQL di atas seluruhnya, dan tekan tombol <strong>"Run"</strong>. Data tabular interval otomatis dapat diakses dan disimpan secara cloud!
+              </p>
             </div>
           </div>
         </div>

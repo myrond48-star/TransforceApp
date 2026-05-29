@@ -24,7 +24,8 @@ if (typeof window !== 'undefined' && !localStorage.getItem('supabase_url') && (!
   console.warn('Supabase URL is not configured.');
 }
 
-export const supabase = createClient(url, key);
+// Export as let so it can be dynamically reassigned without a page reload
+export let supabase = createClient(url, key);
 
 // Function to update config and ensure it's written before any other action
 export const updateSupabaseRuntimeConfig = (newUrl: string, newKey: string) => {
@@ -33,8 +34,14 @@ export const updateSupabaseRuntimeConfig = (newUrl: string, newKey: string) => {
   // Clean URL before saving
   let cleanUrl = newUrl.trim().split('/rest/v1')[0].replace(/\/$/, "");
   
-  localStorage.setItem('supabase_url', cleanUrl);
-  localStorage.setItem('supabase_key', newKey.trim());
+  try {
+    localStorage.setItem('supabase_url', cleanUrl);
+    localStorage.setItem('supabase_key', newKey.trim());
+    console.log("Supabase runtime config updated in localStorage:", cleanUrl);
+  } catch (e) {
+    console.warn("Failed to save to localStorage. Using in-memory configuration:", e);
+  }
   
-  console.log("Supabase runtime config updated in localStorage:", cleanUrl);
+  // Dynamically swap the active client
+  supabase = createClient(cleanUrl, newKey.trim());
 };

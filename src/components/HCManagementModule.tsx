@@ -53,7 +53,7 @@ const attritionData = [
 
 const SITES = ["Jakarta", "Surabaya", "Bandung"];
 const UNITS = ["Operation", "Support", "Technology"];
-const PROJECTS = ["Project Alpha", "Project Beta"];
+const DEFAULT_PROJECTS = ["Project Alpha", "Project Beta"];
 const LANGUAGES = ["English", "Indonesian", "Japanese"];
 
 export default function HCManagementModule({ onBack }: HCManagementModuleProps) {
@@ -64,9 +64,27 @@ export default function HCManagementModule({ onBack }: HCManagementModuleProps) 
   const [selectedOPG, setSelectedOPG] = useState("all");
   const [selectedProject, setSelectedProject] = useState("all");
   const [selectedLanguage, setSelectedLanguage] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Supabase State
   const [employees, setEmployees] = useState<any[]>([]);
+
+  const PROJECTS = React.useMemo(() => {
+    if (employees && employees.length > 0) {
+      const dbProjs = Array.from(new Set(employees.map(emp => emp.project).filter(Boolean))) as string[];
+      if (dbProjs.length > 0) {
+        return dbProjs.filter(p => p.trim() !== "").sort();
+      }
+    }
+    return DEFAULT_PROJECTS;
+  }, [employees]);
+
+  useEffect(() => {
+    if (PROJECTS.length > 0 && !PROJECTS.includes(formData.project)) {
+      setFormData(prev => ({ ...prev, project: PROJECTS[0] }));
+    }
+  }, [PROJECTS]);
+
   const [isLoading, setIsLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -131,7 +149,11 @@ export default function HCManagementModule({ onBack }: HCManagementModuleProps) 
       setEmployees(data || []);
     } catch (err: any) {
       console.error("Failed to load employees:", err);
-      setFetchError(err.message || "Failed to connect to Supabase database");
+      if (err?.code === 'PGRST205' || err?.message?.includes('schema cache')) {
+        setFetchError("PGRST205 - Schema Cache Error");
+      } else {
+        setFetchError(err.message || "Failed to connect to Supabase database");
+      }
     } finally {
       setIsLoading(false);
     }
@@ -344,6 +366,8 @@ export default function HCManagementModule({ onBack }: HCManagementModuleProps) 
           <input 
             type="text" 
             placeholder="SEARCH EMPLOYEE NAME OR NIP..." 
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full bg-gray-50 border-none rounded-xl pl-10 pr-4 py-2.5 text-[11px] font-bold uppercase tracking-tight focus:ring-1 focus:ring-black outline-none"
           />
         </div>
@@ -370,6 +394,14 @@ export default function HCManagementModule({ onBack }: HCManagementModuleProps) 
           .filter(emp => selectedLocation === "all" || (emp as any).building_location === selectedLocation)
           .filter(emp => selectedOPG === "all" || (emp as any).opg === selectedOPG)
           .filter(emp => selectedProject === "all" || (emp as any).project === selectedProject)
+          .filter(emp => {
+            const query = searchQuery.toLowerCase().trim();
+            if (!query) return true;
+            return (
+              String(emp.name || "").toLowerCase().includes(query) ||
+              String(emp.nip || "").toLowerCase().includes(query)
+            );
+          })
           .map((emp) => (
           <div key={emp.id} className="p-4 flex flex-col gap-4">
              <div className="flex items-center justify-between">
@@ -459,14 +491,24 @@ export default function HCManagementModule({ onBack }: HCManagementModuleProps) 
                   <div className="flex flex-col items-center justify-center gap-3">
                     <AlertCircle className="w-8 h-8 text-active-red opacity-40" />
                     <p className="text-xs font-bold text-active-red lowercase tracking-widest">error: {fetchError}</p>
-                    {fetchError.includes("schema cache") ? (
+                    {fetchError.includes("Schema Cache") || fetchError.includes("schema cache") ? (
                       <div className="text-[10px] text-neutral-gray max-w-md mx-auto space-y-1">
-                        <p>Supabase cannot find the 'employees' table. If you just created it:</p>
+                        <p>Supabase tidak dapat menemukan tabel 'employees' karena cache belum di-reload. Cara memperbaikinya:</p>
                         <ol className="list-decimal text-left ml-5 mt-2 space-y-1 text-black font-medium">
-                          <li>Go to your Supabase Dashboard</li>
-                          <li>Open API Settings (Project Settings -&gt; API)</li>
-                          <li>Click <strong>"Reload Schema Cache"</strong></li>
-                          <li>Ensure you used the correct project URL and Anon Key in your .env variables.</li>
+                          <li>Buka Dashboard Supabase Anda</li>
+                          <li>Buka <strong>Project Settings</strong> (ikon gerigi di kiri bawah)</li>
+                          <li>Pilih menu <strong>API</strong></li>
+                          <li>Scroll ke bagian atas/tengah dan klik tombol <strong>"Reload Schema Cache"</strong></li>
+                          <li>Setelah itu klik tombol "RETRY CONNECTION" di bawah ini.</li>
+                        </ol>
+                      </div>
+                    ) : fetchError.includes("Failed to fetch") ? (
+                      <div className="text-[10px] text-neutral-gray max-w-md mx-auto space-y-1">
+                        <p>Network connection failed. This typically means:</p>
+                        <ol className="list-decimal text-left ml-5 mt-2 space-y-1 text-black font-medium">
+                          <li>The Supabase URL in Settings is invalid or typo'd.</li>
+                          <li>Your Supabase project is Paused, Restarting, or Offline.</li>
+                          <li>An ad-blocker or network firewall is blocking the API request.</li>
                         </ol>
                       </div>
                     ) : (
@@ -491,6 +533,14 @@ export default function HCManagementModule({ onBack }: HCManagementModuleProps) 
                 .filter(emp => selectedLocation === "all" || (emp as any).building_location === selectedLocation)
                 .filter(emp => selectedOPG === "all" || (emp as any).opg === selectedOPG)
                 .filter(emp => selectedProject === "all" || (emp as any).project === selectedProject)
+                .filter(emp => {
+                  const query = searchQuery.toLowerCase().trim();
+                  if (!query) return true;
+                  return (
+                    String(emp.name || "").toLowerCase().includes(query) ||
+                    String(emp.nip || "").toLowerCase().includes(query)
+                  );
+                })
                 .map((emp) => (
                 <tr key={emp.id} className="hover:bg-gray-50/50 transition-colors group">
                 <td className="px-4 py-3 font-bold text-black">{emp.opg}</td>
