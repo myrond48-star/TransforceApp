@@ -26,7 +26,8 @@ import {
   MoreHorizontal,
   UserCheck,
   UserCircle,
-  LayoutDashboard
+  LayoutDashboard,
+  Info
 } from "lucide-react";
 import { 
   XAxis, 
@@ -257,6 +258,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
   const [rosterEndDate, setRosterEndDate] = useState(format(addDays(startOfWeek(new Date(), {weekStartsOn: 1}), 6), 'yyyy-MM-dd'));
   const [generatedRoster, setGeneratedRoster] = useState<{empId: string, roster: Record<string, string>}[]>([]);
   const [isGeneratingRoster, setIsGeneratingRoster] = useState(false);
+  const [forcedOffAgents, setForcedOffAgents] = useState<Set<string>>(new Set());
 
   const SEED_WORKFORCE = [
     { id: "wf_1", nip: "2221669", name: "Yoga Fachrul Tristiawan", skill: "English", channel: "Voice", gender: "Male", religion: "Islam", project: "Project Alpha", unit: "Unit A", site: "Jakarta" },
@@ -1246,7 +1248,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
           histFinalShiftsRounded[hd] = {};
           Object.keys(compositionShifts).forEach(code => {
              let finalVal = rawShifts[code];
-             if (compDayTotal > fteTarget && compDayTotal > 0) {
+             if (compositionMode !== 'peak' && compDayTotal > fteTarget && compDayTotal > 0) {
                  finalVal = finalVal * (fteTarget / compDayTotal);
              }
              histFinalShiftsRounded[hd][code] = Math.round(finalVal);
@@ -1322,10 +1324,14 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
       // Define standard max working days limit per agent
       const maxWorkingDaysPerAgent = days.filter(d => !["Sat", "Sun"].includes(format(parseISO(d), "EEE"))).length;
 
-      const roster: { empId: string, roster: Record<string, string> }[] = agentsToSchedule.map(a => ({
-          empId: a.id,
-          roster: {}
-      }));
+      const roster: { empId: string, roster: Record<string, string> }[] = agentsToSchedule.map(a => {
+          const isForcedOff = forcedOffAgents.has(a.id);
+          const initialRoster: Record<string, string> = {};
+          if (isForcedOff) {
+              days.forEach(d => initialRoster[d] = 'OFF');
+          }
+          return { empId: a.id, roster: initialRoster };
+      });
       
       const parseTime = (t: string) => { const [h, m] = t.split(':').map(Number); return h + m/60; };
       const getShiftEnd = (startStr: string, endStr: string) => {
@@ -1557,6 +1563,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
 
       // PASS 1: Strict constraints (Allowed consecutive work: 5 days, consecutive M1/S7: 4 days, 10 hours rest)
       roster.forEach(rosterEntry => {
+          if (forcedOffAgents.has(rosterEntry.empId)) return;
           const agent = agentsToSchedule.find(a => a.id === rosterEntry.empId);
           if (!agent) return;
           
@@ -1597,6 +1604,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
 
       // PASS 2: Relax consecutive work constraint to 6 days and consecutive M1/S7 to 5 days, if needed
       roster.forEach(rosterEntry => {
+          if (forcedOffAgents.has(rosterEntry.empId)) return;
           const agent = agentsToSchedule.find(a => a.id === rosterEntry.empId);
           if (!agent) return;
           
@@ -1637,6 +1645,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
 
       // PASS 3: Fallback relaxation of rest or check constraints in extreme cases to strictly guarantee correct total HK (e.g. May: 21 HK)
       roster.forEach(rosterEntry => {
+          if (forcedOffAgents.has(rosterEntry.empId)) return;
           const agent = agentsToSchedule.find(a => a.id === rosterEntry.empId);
           if (!agent) return;
           
@@ -1677,7 +1686,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
               
               // Fix Understaffing (Priority to those with the fewest working days to balance out)
               while (roster.filter(r => r.roster[d] === shiftCode).length < requiredCount) {
-                  let availableAgents = roster.filter(r => r.roster[d] === 'OFF');
+                  let availableAgents = roster.filter(r => r.roster[d] === 'OFF' && !forcedOffAgents.has(r.empId));
                   
                   if (shiftCode.toUpperCase() === 'M1' || shiftCode.toUpperCase() === 'S7') {
                       availableAgents = availableAgents.filter(r => {
@@ -1710,7 +1719,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
               
               // Fix Overstaffing
               while (roster.filter(r => r.roster[d] === shiftCode).length > requiredCount) {
-                  let currentAssigned = roster.filter(r => r.roster[d] === shiftCode);
+                  let currentAssigned = roster.filter(r => r.roster[d] === shiftCode && !forcedOffAgents.has(r.empId));
                   if (currentAssigned.length === 0) break;
                   
                   // Sort by descending working days to remove those with the most overtime first
@@ -1734,6 +1743,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
 
       // PASS 5: Ensure every agent exactly reaches maxWorkingDaysPerAgent (allows surplus overflow)
       agentsToSchedule.forEach(agent => {
+          if (forcedOffAgents.has(agent.id)) return;
           let agentRoster = roster.find(r => r.empId === agent.id)!;
           let currentWorkDays = Object.values(agentRoster.roster).filter(s => s !== 'OFF').length;
           
@@ -1815,94 +1825,216 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
           }
       });
       
-      // PASS 6: Interval-Based Swap Fine-Tuning
-      for (let iter = 0; iter < 3; iter++) {
-          days.forEach((d, dayIdx) => {
-              // 1. Calculate current gaps for this day
-              const currentGaps: number[] = slots.map(s => {
-                  let schedCount = 0;
-                  roster.forEach(r => {
-                      const code = r.roster[d];
-                      if (code && code !== 'OFF' && compositionShifts[code]) {
-                          if (isSlotInShift(s, compositionShifts[code].start, compositionShifts[code].end)) {
-                              schedCount++;
-                          }
-                      }
-                  });
-                  return schedCount - (histRequirements[d]?.[s] || 0);
-              });
-              
-              roster.forEach(agentRoster => {
-                  const currentShift = agentRoster.roster[d];
-                  if (!currentShift || currentShift === 'OFF') return; // Only swap existing working days to another shift
-                  
-                  const agent = agentsToSchedule.find(a => a.id === agentRoster.empId);
-                  if (!agent) return;
-
-                  let bestShift = currentShift;
-                  let bestScore = 0;
-                  
-                  shiftCodesSorted.forEach(candidateShift => {
-                      if (candidateShift === currentShift) return;
-                      // Constraints Check
-                      if (candidateShift.toUpperCase() === 'M1' || candidateShift.toUpperCase() === 'S7') {
-                          const gender = (agent.gender || '').toUpperCase().trim();
-                          if (gender !== 'L' && gender !== 'MALE' && gender !== 'LAKI-LAKI' && gender !== 'PRIA') return;
-                          const tempMsg = { ...agentRoster.roster, [d]: candidateShift };
-                          if (!checkMaxConsecM1S7(tempMsg, 4)) return;
-                      }
-                      const cStart = parseTime(compositionShifts[candidateShift].start);
-                      const cEnd = getShiftEnd(compositionShifts[candidateShift].start, compositionShifts[candidateShift].end);
-                      
-                      if (dayIdx > 0) {
-                          const prev = agentRoster.roster[days[dayIdx-1]];
-                          if (prev && prev !== 'OFF' && compositionShifts[prev]) {
-                             const pEnd = getShiftEnd(compositionShifts[prev].start, compositionShifts[prev].end);
-                             if ((cStart + 24 - pEnd) < 10) return;
-                          }
-                      }
-                      if (dayIdx < days.length - 1) {
-                          const next = agentRoster.roster[days[dayIdx+1]];
-                          if (next && next !== 'OFF' && compositionShifts[next]) {
-                             const nStart = parseTime(compositionShifts[next].start);
-                             if ((nStart + 24 - cEnd) < 10) return;
-                          }
-                      }
-                      
-                      // Score logic
-                      let scoreImprovement = 0;
-                      slots.forEach((s, sIdx) => {
-                          const gap = currentGaps[sIdx];
-                          const inCurrent = isSlotInShift(s, compositionShifts[currentShift].start, compositionShifts[currentShift].end);
-                          const inCandidate = isSlotInShift(s, compositionShifts[candidateShift].start, compositionShifts[candidateShift].end);
-                          
-                          if (inCurrent && !inCandidate) {
-                              if (gap <= 0) scoreImprovement -= 10;
-                              else if (gap > 2) scoreImprovement += 5;
-                          } else if (!inCurrent && inCandidate) {
-                              if (gap < 0) scoreImprovement += 10;
-                              else if (gap >= 2) scoreImprovement -= 5;
-                          }
-                      });
-                      
-                      if (scoreImprovement > bestScore) {
-                          bestScore = scoreImprovement;
-                          bestShift = candidateShift;
-                      }
-                  });
-                  
-                  if (bestShift !== currentShift) {
-                      agentRoster.roster[d] = bestShift;
-                      // Instantly update currentGaps for the next agent
-                      slots.forEach((s, sIdx) => {
-                          const inCurrent = isSlotInShift(s, compositionShifts[currentShift].start, compositionShifts[currentShift].end);
-                          const inCandidate = isSlotInShift(s, compositionShifts[bestShift].start, compositionShifts[bestShift].end);
-                          if (inCurrent && !inCandidate) currentGaps[sIdx]--;
-                          else if (!inCurrent && inCandidate) currentGaps[sIdx]++;
-                      });
+      // PASS 6: Fast Simulated Annealing / Hill Climbing to maximize accuracy
+      let currentGaps: Record<string, number[]> = {};
+      days.forEach(d => {
+          currentGaps[d] = slots.map(s => {
+              let schedCount = 0;
+              roster.forEach(r => {
+                  const code = r.roster[d];
+                  if (code && code !== 'OFF' && compositionShifts[code] && isSlotInShift(s, compositionShifts[code].start, compositionShifts[code].end)) {
+                      schedCount++;
                   }
               });
+              return schedCount - (histRequirements[d]?.[s] || 0);
           });
+      });
+
+      const getGapPenalty = (gap: number) => {
+          if (gap < 0) return -gap * 2; // Understaffing is 2x worse
+          if (gap > 2) return (gap - 2); // Overstaffing beyond 2 is bad
+          return 0; // Ideal range 0-2
+      };
+
+      const calculateGlobalScore = () => {
+          let score = 0;
+          days.forEach(d => {
+              for(let i=0; i<slots.length; i++) {
+                 score -= getGapPenalty(currentGaps[d][i]);
+              }
+          });
+          return score;
+      };
+
+      let currentScore = calculateGlobalScore();
+      const allShifts = ['OFF', ...shiftCodesSorted];
+
+      // 300,000 iterations of random hill climbing (takes <15ms in javascript)
+      for(let iter=0; iter<300000; iter++) {
+          const randAgentIdx = Math.floor(Math.random() * roster.length);
+          const agentRoster = roster[randAgentIdx];
+          if (forcedOffAgents.has(agentRoster.empId)) continue;
+          
+          const randDayIdx = Math.floor(Math.random() * days.length);
+          const d = days[randDayIdx];
+          const oldShift = agentRoster.roster[d] || 'OFF';
+          
+          // Determine mutation type: 50% chance to change shift on same day, 50% chance to swap an OFF day with a Working day
+          const mutationType = Math.random() < 0.5 ? 'change_shift' : 'swap_days';
+          
+          let candidateShift = '';
+          let d2 = '';
+          let oldShift2 = '';
+          
+          if (mutationType === 'change_shift') {
+             // Only change between working shifts if it's already a working day
+             let validShifts = oldShift === 'OFF' ? ['OFF'] : shiftCodesSorted;
+             if (validShifts.length === 1 && validShifts[0] === 'OFF') continue;
+             
+             candidateShift = validShifts[Math.floor(Math.random() * validShifts.length)];
+             if (candidateShift === oldShift) continue;
+             
+             // Single day modification
+             const tempRoster = { ...agentRoster.roster, [d]: candidateShift };
+             if (!checkMaxConsecWork(tempRoster, 5)) continue;
+             
+             if (candidateShift.toUpperCase() === 'M1' || candidateShift.toUpperCase() === 'S7') {
+                 const agent = agentsToSchedule.find(a => a.id === agentRoster.empId);
+                 const gender = (agent?.gender || '').toUpperCase().trim();
+                 if (gender !== 'L' && gender !== 'MALE' && gender !== 'LAKI-LAKI' && gender !== 'PRIA') continue;
+                 if (!checkMaxConsecM1S7(tempRoster, 4)) continue;
+             }
+             
+             const cStart = parseTime(compositionShifts[candidateShift].start);
+             const cEnd = getShiftEnd(compositionShifts[candidateShift].start, compositionShifts[candidateShift].end);
+             if (randDayIdx > 0) {
+                 const prev = tempRoster[days[randDayIdx-1]];
+                 if (prev && prev !== 'OFF' && compositionShifts[prev]) {
+                    const pEnd = getShiftEnd(compositionShifts[prev].start, compositionShifts[prev].end);
+                    if ((cStart + 24 - pEnd) < 10) continue;
+                 }
+             }
+             if (randDayIdx < days.length - 1) {
+                 const next = tempRoster[days[randDayIdx+1]];
+                 if (next && next !== 'OFF' && compositionShifts[next]) {
+                    const nStart = parseTime(compositionShifts[next].start);
+                    if ((nStart + 24 - cEnd) < 10) continue;
+                 }
+             }
+
+             // Evaluate change delta
+             let deltaScore = 0;
+             slots.forEach((s, sIdx) => {
+                 const gap = currentGaps[d][sIdx];
+                 let newGap = gap;
+                 
+                 if (isSlotInShift(s, compositionShifts[oldShift].start, compositionShifts[oldShift].end)) {
+                     newGap--;
+                 }
+                 if (isSlotInShift(s, compositionShifts[candidateShift].start, compositionShifts[candidateShift].end)) {
+                     newGap++;
+                 }
+                 
+                 if (gap !== newGap) {
+                     deltaScore += getGapPenalty(gap) - getGapPenalty(newGap);
+                 }
+             });
+
+             if (deltaScore >= 0) {
+                 agentRoster.roster[d] = candidateShift;
+                 currentScore += deltaScore;
+                 
+                 slots.forEach((s, sIdx) => {
+                     if (isSlotInShift(s, compositionShifts[oldShift].start, compositionShifts[oldShift].end)) {
+                         currentGaps[d][sIdx]--;
+                     }
+                     if (isSlotInShift(s, compositionShifts[candidateShift].start, compositionShifts[candidateShift].end)) {
+                         currentGaps[d][sIdx]++;
+                     }
+                 });
+             }
+          } else {
+             // Swap Days Mode
+             if (oldShift === 'OFF') {
+                 // d is OFF, we need to find a working day to swap with
+                 const workingDaysIdxs = days.map((day, idx) => ({day, idx})).filter(x => agentRoster.roster[x.day] !== 'OFF');
+                 if (workingDaysIdxs.length === 0) continue;
+                 const randWork = workingDaysIdxs[Math.floor(Math.random() * workingDaysIdxs.length)];
+                 d2 = randWork.day;
+                 oldShift2 = agentRoster.roster[d2];
+                 candidateShift = oldShift2; // Moving the working shift to d
+             } else {
+                 // d is Working, we need to find an OFF day to swap with
+                 const offDaysIdxs = days.map((day, idx) => ({day, idx})).filter(x => !agentRoster.roster[x.day] || agentRoster.roster[x.day] === 'OFF');
+                 if (offDaysIdxs.length === 0) continue;
+                 const randOff = offDaysIdxs[Math.floor(Math.random() * offDaysIdxs.length)];
+                 d2 = randOff.day;
+                 oldShift2 = 'OFF';
+                 candidateShift = 'OFF'; // Moving OFF to d
+             }
+
+             // We are swapping the shift of d and d2
+             // d gets oldShift2, d2 gets oldShift
+             const tempRoster = { ...agentRoster.roster, [d]: oldShift2, [d2]: oldShift };
+             if (!checkMaxConsecWork(tempRoster, 5)) continue;
+             
+             // Check constraints for d and d2
+             let validConstraints = true;
+             for (const testDay of [d, d2]) {
+                const shiftToTest = tempRoster[testDay];
+                if (shiftToTest === 'OFF') continue;
+                
+                if (shiftToTest.toUpperCase() === 'M1' || shiftToTest.toUpperCase() === 'S7') {
+                   const agent = agentsToSchedule.find(a => a.id === agentRoster.empId);
+                   const gender = (agent?.gender || '').toUpperCase().trim();
+                   if (gender !== 'L' && gender !== 'MALE' && gender !== 'LAKI-LAKI' && gender !== 'PRIA') validConstraints = false;
+                   if (!checkMaxConsecM1S7(tempRoster, 4)) validConstraints = false;
+                }
+                
+                const tIdx = days.indexOf(testDay);
+                const cStart = parseTime(compositionShifts[shiftToTest].start);
+                const cEnd = getShiftEnd(compositionShifts[shiftToTest].start, compositionShifts[shiftToTest].end);
+                if (tIdx > 0) {
+                    const prev = tempRoster[days[tIdx-1]];
+                    if (prev && prev !== 'OFF' && compositionShifts[prev]) {
+                       const pEnd = getShiftEnd(compositionShifts[prev].start, compositionShifts[prev].end);
+                       if ((cStart + 24 - pEnd) < 10) validConstraints = false;
+                    }
+                }
+                if (tIdx < days.length - 1) {
+                    const next = tempRoster[days[tIdx+1]];
+                    if (next && next !== 'OFF' && compositionShifts[next]) {
+                       const nStart = parseTime(compositionShifts[next].start);
+                       if ((nStart + 24 - cEnd) < 10) validConstraints = false;
+                    }
+                }
+             }
+             if (!validConstraints) continue;
+
+             // Evaluate change delta (combines delta from d and d2)
+             let deltaScore = 0;
+             // For d: removes oldShift, adds oldShift2
+             slots.forEach((s, sIdx) => {
+                 const gap = currentGaps[d][sIdx];
+                 let newGap = gap;
+                 if (oldShift !== 'OFF' && isSlotInShift(s, compositionShifts[oldShift].start, compositionShifts[oldShift].end)) newGap--;
+                 if (oldShift2 !== 'OFF' && isSlotInShift(s, compositionShifts[oldShift2].start, compositionShifts[oldShift2].end)) newGap++;
+                 if (gap !== newGap) deltaScore += getGapPenalty(gap) - getGapPenalty(newGap);
+             });
+             // For d2: removes oldShift2, adds oldShift
+             slots.forEach((s, sIdx) => {
+                 const gap = currentGaps[d2][sIdx];
+                 let newGap = gap;
+                 if (oldShift2 !== 'OFF' && isSlotInShift(s, compositionShifts[oldShift2].start, compositionShifts[oldShift2].end)) newGap--;
+                 if (oldShift !== 'OFF' && isSlotInShift(s, compositionShifts[oldShift].start, compositionShifts[oldShift].end)) newGap++;
+                 if (gap !== newGap) deltaScore += getGapPenalty(gap) - getGapPenalty(newGap);
+             });
+
+             if (deltaScore >= 0) {
+                 agentRoster.roster[d] = oldShift2;
+                 agentRoster.roster[d2] = oldShift;
+                 currentScore += deltaScore;
+                 
+                 slots.forEach((s, sIdx) => {
+                     if (oldShift !== 'OFF' && isSlotInShift(s, compositionShifts[oldShift].start, compositionShifts[oldShift].end)) currentGaps[d][sIdx]--;
+                     if (oldShift2 !== 'OFF' && isSlotInShift(s, compositionShifts[oldShift2].start, compositionShifts[oldShift2].end)) currentGaps[d][sIdx]++;
+                 });
+                 slots.forEach((s, sIdx) => {
+                     if (oldShift2 !== 'OFF' && isSlotInShift(s, compositionShifts[oldShift2].start, compositionShifts[oldShift2].end)) currentGaps[d2][sIdx]--;
+                     if (oldShift !== 'OFF' && isSlotInShift(s, compositionShifts[oldShift].start, compositionShifts[oldShift].end)) currentGaps[d2][sIdx]++;
+                 });
+             }
+          }
       }
       
       setTimeout(() => {
@@ -1952,6 +2084,15 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
 
         {generatedRoster.length > 0 && (
           <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col animate-in fade-in duration-500">
+            <div className="bg-slate-50 px-6 py-3 border-b border-gray-100 flex items-center justify-between">
+               <div className="flex items-center gap-4">
+                 <span className="text-xs font-black text-slate-500 uppercase tracking-widest"><Info size={12} className="inline mr-1 -mt-0.5" /> Tips</span>
+                 <span className="text-[10px] font-bold text-slate-500 bg-white px-2 py-1 rounded border border-gray-200">
+                    Max HK / Agent: <strong className="text-indigo-600">{days.filter(d => !["Sat", "Sun"].includes(format(parseISO(d), "EEE"))).length} Hari</strong>
+                 </span>
+               </div>
+               <span className="text-xs font-bold text-slate-500">Klik kanan pada nama Agent untuk <span className="text-rose-500 font-black">Force OFF</span>. (Klik ulang Buat Schedule setelahnya)</span>
+            </div>
             <div className="overflow-x-auto relative">
               <table className="border-separate border-spacing-0 table-fixed min-w-max w-full">
                 <thead>
@@ -1997,13 +2138,43 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                       
                       return (
                       <tr key={agent.id} className="hover:bg-gray-50/50 transition-colors group">
-                        <td className="sticky left-0 z-40 bg-white group-hover:bg-slate-100 border-r border-gray-200 px-4 sm:px-6 py-3 transition-colors w-[180px] sm:w-[220px] min-w-[180px] sm:min-w-[220px] max-w-[180px] sm:max-w-[220px]">
+                        <td 
+                          className="sticky left-0 z-40 bg-white group-hover:bg-slate-100 border-r border-gray-200 px-4 sm:px-6 py-3 transition-colors w-[180px] sm:w-[220px] min-w-[180px] sm:min-w-[220px] max-w-[180px] sm:max-w-[220px] cursor-context-menu"
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            const isForcedOff = forcedOffAgents.has(agent.id);
+                            setForcedOffAgents(prev => {
+                                const next = new Set(prev);
+                                if (isForcedOff) next.delete(agent.id);
+                                else next.add(agent.id);
+                                return next;
+                            });
+                            
+                            // Instant visual update for current generated roster view
+                            if (!isForcedOff) {
+                                setGeneratedRoster(prev => prev.map(r => {
+                                    if (r.empId === agent.id) {
+                                        const offR = { ...r.roster };
+                                        days.forEach(d => offR[d] = 'OFF');
+                                        return { ...r, roster: offR };
+                                    }
+                                    return r;
+                                }));
+                            }
+                          }}
+                          title="Klik Kanan untuk Paksa OFF Jadwal (Force Off)"
+                        >
                           <div className="flex flex-col w-full max-w-full overflow-hidden">
                             <div className="flex items-center gap-1.5 w-full justify-between">
-                              <span className="text-[11px] font-black text-slate-900 uppercase tracking-tight truncate flex-1 min-w-0" title={agent.name}>{agent.name}</span>
+                              <span className={`text-[11px] font-black uppercase tracking-tight truncate flex-1 min-w-0 ${forcedOffAgents.has(agent.id) ? 'text-rose-500 line-through opacity-70' : 'text-slate-900'}`} title={agent.name}>
+                                {agent.name}
+                              </span>
                               <span className="bg-slate-100 text-slate-500 text-[8px] font-black px-1.5 py-0.5 rounded-full shrink-0">{genderStr}</span>
                             </div>
-                            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">ID: {agent.id}</span>
+                            <div className="flex items-center gap-1 mt-0.5">
+                                <span className={`text-[9px] font-bold uppercase tracking-widest ${forcedOffAgents.has(agent.id) ? 'text-rose-400' : 'text-slate-400'}`}>ID: {agent.id}</span>
+                                {forcedOffAgents.has(agent.id) && <span className="bg-rose-100 text-rose-600 text-[7px] font-black px-1 rounded uppercase tracking-wider">Forced Off</span>}
+                            </div>
                           </div>
                         </td>
                         {days.map((d, i) => {
