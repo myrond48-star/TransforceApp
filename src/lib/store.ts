@@ -31,47 +31,71 @@ interface AppState {
   syncSettingsFromDB: () => Promise<void>;
 }
 
-export const useAppStore = create<AppState>((set) => ({
-  settings: {
-    apiUrl: '',
-    apiKey: '',
-    adhId: '',
-    channels: ['Call', 'Digital Chat', 'Email', 'Leader'],
-    shifts: {
-      "S1": { s: "07:00", e: "16:00", w: 1 },
-      "S2": { s: "15:00", e: "00:00", w: 2 },
-      "H": { s: "08:00", e: "17:00", w: 3 },
-    },
-    holidays: {},
-    autoBreak: {},
-    fridayBreak: {
-      normal: 90,
-      puasa: 60,
-      shiftCode: 'S2'
-    },
-    puasa: [],
-    puasaShifts: {},
-    roles: {
-      'Admin': { isAdmin: true, canEditSchedule: true, canSeeAll: true, canSwap: true, allowedUI: ['viewInt', 'viewCal', 'viewAdh', 'viewFor', 'btnApp', 'btnBrk', 'btnSys', 'btnImp', 'btnPub'], allowedActivities: ['REMOVE'] },
-      'Manager': { isAdmin: false, canEditSchedule: true, canSeeAll: true, canSwap: true, allowedUI: ['viewInt', 'viewCal', 'viewAdh', 'viewFor', 'btnApp', 'btnBrk'], allowedActivities: [] },
-      'Agent': { isAdmin: false, canEditSchedule: false, canSeeAll: false, canSwap: true, allowedUI: ['viewInt', 'viewCal'], allowedActivities: [] },
-    },
-    bizRules: {
-      operatingHours: {},
-      weekendDays: [0, 6],
-      holidayClosed: true,
-      channelShifts: {}
-    },
-    activities: {
-      "LB": { label: "Lunch Break", color: "bg-red-500", duration: "4", category: "break" },
-      "SB": { label: "Short Break", color: "bg-amber-400", duration: "1", category: "break" },
-      "MT": { label: "Meeting", color: "bg-black", duration: "2", category: "work" },
-      "TR": { label: "Training", color: "bg-indigo-600", duration: "4", category: "work" },
-    }
+const DEFAULT_SETTINGS: Settings = {
+  apiUrl: '',
+  apiKey: '',
+  adhId: '',
+  channels: ['Call', 'Digital Chat', 'Email', 'Leader'],
+  shifts: {
+    "S1": { s: "07:00", e: "16:00", w: 1 },
+    "S2": { s: "15:00", e: "00:00", w: 2 },
+    "H": { s: "08:00", e: "17:00", w: 3 },
   },
-  updateSettings: (newSettings) => set((state) => ({
-    settings: { ...state.settings, ...newSettings }
-  })),
+  holidays: {},
+  autoBreak: {},
+  fridayBreak: {
+    normal: 90,
+    puasa: 60,
+    shiftCode: 'S2'
+  },
+  puasa: [],
+  puasaShifts: {},
+  roles: {
+    'Admin': { isAdmin: true, canEditSchedule: true, canSeeAll: true, canSwap: true, allowedUI: ['viewInt', 'viewCal', 'viewAdh', 'viewFor', 'btnApp', 'btnBrk', 'btnSys', 'btnImp', 'btnPub'], allowedActivities: ['REMOVE'] },
+    'Manager': { isAdmin: false, canEditSchedule: true, canSeeAll: true, canSwap: true, allowedUI: ['viewInt', 'viewCal', 'viewAdh', 'viewFor', 'btnApp', 'btnBrk'], allowedActivities: [] },
+    'Agent': { isAdmin: false, canEditSchedule: false, canSeeAll: false, canSwap: true, allowedUI: ['viewInt', 'viewCal'], allowedActivities: [] },
+  },
+  bizRules: {
+    operatingHours: {},
+    weekendDays: [0, 6],
+    holidayClosed: true,
+    channelShifts: {}
+  },
+  activities: {
+    "LB": { label: "Lunch Break", color: "bg-red-500", duration: "4", category: "break" },
+    "SB": { label: "Short Break", color: "bg-amber-400", duration: "1", category: "break" },
+    "MT": { label: "Meeting", color: "bg-black", duration: "2", category: "work" },
+    "TR": { label: "Training", color: "bg-indigo-600", duration: "4", category: "work" },
+  }
+};
+
+const getInitialSettings = (): Settings => {
+  if (typeof window === 'undefined') return DEFAULT_SETTINGS;
+  try {
+    const saved = localStorage.getItem('portal_settings');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return { ...DEFAULT_SETTINGS, ...parsed };
+    }
+  } catch (e) {
+    console.warn("Failed to load settings from localStorage:", e);
+  }
+  return DEFAULT_SETTINGS;
+};
+
+export const useAppStore = create<AppState>((set) => ({
+  settings: getInitialSettings(),
+  updateSettings: (newSettings) => set((state) => {
+    const updatedSettings = { ...state.settings, ...newSettings };
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.setItem('portal_settings', JSON.stringify(updatedSettings));
+      } catch (e) {
+        console.warn("Failed to save settings to localStorage:", e);
+      }
+    }
+    return { settings: updatedSettings };
+  }),
   syncSettingsFromDB: async () => {
     console.log("Syncing settings from DB...");
     // Mock sync for now

@@ -256,16 +256,21 @@ export async function deleteWorkforceRecord(id: string | number) {
 /**
  * Interval Requirements Database Helpers
  */
-export async function fetchIntervalRequirements(startDate: string, endDate: string, intervalType: string) {
+export async function fetchIntervalRequirements(startDate: string, endDate: string, intervalType: string, project: string) {
   try {
-    console.log(`Fetching interval requirements (${intervalType}) from Supabase: ${startDate} to ${endDate}...`);
-    const { data, error } = await supabase
+    console.log(`Fetching interval requirements (${intervalType}) from Supabase: ${startDate} to ${endDate} for project ${project}...`);
+    let query = supabase
       .from('interval_requirements')
       .select('*')
       .gte('date', startDate)
       .lte('date', endDate)
       .eq('interval_type', intervalType);
+
+    if (project && project !== 'all') {
+      query = query.eq('project', project);
+    }
     
+    const { data, error } = await query;
     if (error) throw error;
     return data || [];
   } catch (err: any) {
@@ -280,13 +285,88 @@ export async function upsertIntervalRequirements(records: any[]) {
     console.log(`Upserting ${records.length} interval requirements into Supabase...`);
     const { data, error } = await supabase
       .from('interval_requirements')
-      .upsert(records, { onConflict: 'date,time_slot,interval_type' })
+      .upsert(records, { onConflict: 'date,time_slot,interval_type,project' })
+      .select();
+    
+    if (error) {
+      console.warn("Upsert failed, falling back to delete-then-insert to avoid constraint issues:", error.message);
+      const dates = records.map(r => r.date).filter(Boolean);
+      if (dates.length > 0) {
+        const sortedDates = [...dates].sort();
+        const minDate = sortedDates[0];
+        const maxDate = sortedDates[sortedDates.length - 1];
+        const proj = records[0].project || 'default';
+        const type = records[0].interval_type || '1h';
+        
+        console.log(`Deleting old records for project ${proj}, type ${type} from ${minDate} to ${maxDate}...`);
+        const { error: delError } = await supabase
+          .from('interval_requirements')
+          .delete()
+          .eq('project', proj)
+          .eq('interval_type', type)
+          .gte('date', minDate)
+          .lte('date', maxDate);
+        
+        if (delError) {
+          console.error("Delete step failed:", delError.message);
+        } else {
+          console.log("Delete succeeded, executing bulk insert...");
+          const { data: insData, error: insError } = await supabase
+            .from('interval_requirements')
+            .insert(records)
+            .select();
+            
+          if (insError) throw insError;
+          return insData || [];
+        }
+      }
+      throw error;
+    }
+    return data || [];
+  } catch (err: any) {
+    console.warn("Could not upsert into 'interval_requirements' table. Using local fallback:", err.message);
+    throw err;
+  }
+}
+
+/**
+ * Roster Schedule Database Helpers
+ */
+export async function fetchRosterSchedule(startDate: string, endDate: string, project: string) {
+  try {
+    console.log(`Fetching roster schedule from Supabase: ${startDate} to ${endDate} for project ${project}...`);
+    let query = supabase
+      .from('roster_schedule')
+      .select('*')
+      .gte('date', startDate)
+      .lte('date', endDate);
+
+    if (project && project !== 'all') {
+      query = query.eq('project', project);
+    }
+    
+    const { data, error } = await query;
+    if (error) throw error;
+    return data || [];
+  } catch (err: any) {
+    console.warn("Could not query 'roster_schedule' table:", err.message);
+    throw err;
+  }
+}
+
+export async function upsertRosterSchedule(records: any[]) {
+  try {
+    if (!records || records.length === 0) return [];
+    console.log(`Upserting ${records.length} roster schedule records into Supabase...`);
+    const { data, error } = await supabase
+      .from('roster_schedule')
+      .upsert(records, { onConflict: 'date,emp_id,project' })
       .select();
     
     if (error) throw error;
     return data || [];
   } catch (err: any) {
-    console.warn("Could not upsert into 'interval_requirements' table. Using local fallback:", err.message);
+    console.warn("Could not upsert into 'roster_schedule' table:", err.message);
     throw err;
   }
 }
@@ -297,11 +377,15 @@ export async function upsertIntervalRequirements(records: any[]) {
 export async function fetchMasterShifts(project: string) {
   try {
     console.log(`Fetching master shifts for project: ${project} from Supabase...`);
-    const { data, error } = await supabase
+    let query = supabase
       .from('master_shifts')
-      .select('*')
-      .eq('project', project);
+      .select('*');
+
+    if (project && project !== 'all') {
+      query = query.eq('project', project);
+    }
     
+    const { data, error } = await query;
     if (error) throw error;
     return data || [];
   } catch (err: any) {
