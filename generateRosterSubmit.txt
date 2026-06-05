@@ -1,0 +1,151 @@
+1779:    const generateRosterSubmit = () => {
+1780-      setIsGeneratingRoster(true);
+1781-      
+1782-      const slots = getIntervalSlots(histIntervalType);
+1783-      const fteDivisor = histIntervalType === "15m" ? 32 : histIntervalType === "30m" ? 16 : 8;
+1784-      const compositionShifts = (Object.keys(dbShifts).length > 0 ? dbShifts : SHIFTS) as Record<string, { label: string; start: string; end: string; color: string }>;
+1785-
+1786-      const checkIsFemale = (agentInfo: any) => {
+1787-          const g = (agentInfo.gender || '').toUpperCase().trim();
+1788-          if (g === 'L' || g === 'MALE' || g === 'LAKI-LAKI' || g === 'PRIA') {
+1789-              return false;
+1790-          }
+1791-          if (g === 'P' || g === 'FEMALE' || g === 'PEREMPUAN' || g === 'WANITA' || g.startsWith('F')) {
+1792-              return true;
+1793-          }
+1794-          if (g.startsWith('P') && !g.startsWith('PRIA')) {
+1795-              return true;
+1796-          }
+1797-          return false;
+1798-      };
+1799-
+1800-      const agentsToSchedule = combinedAgents
+1801-          .filter(a => matchSite(a.site, selectedSite))
+1802-          .filter(a => matchUnit(a.unit, selectedUnit))
+1803-          .filter(a => matchProject(a.project, selectedProject));
+1804-
+1805-      if (agentsToSchedule.length === 0) {
+1806-        showNotification(`Tidak ada Agent terdaftar untuk Project "${selectedProject === "all" ? "Semua Project" : selectedProject}". Silakan daftarkan Agent terlebih dahulu di tab Database Karyawan atau pilih Project lain.`, "error");
+1807-        setIsGeneratingRoster(false);
+1808-        return;
+1809-      }
+1810-
+1811-      // Define standard maximum working days to avoid skewing scheduling completely towards the first array keys
+1812-      const maxWorkingDaysPerAgent = getExpectedWorkingDays(days);
+1813-
+1814-      // 1. Precompute final required shifts per day (Shift Composition data) for all historical days
+1815-      const histDays = getDaysArray(histStartDate, histEndDate).filter(d => histRequirements[d]);
+1816-      const histFinalShiftsRounded: Record<string, Record<string, number>> = {};
+1817-      
+1818-      histDays.forEach(hd => {
+1819-          const fteTarget = slots.reduce((acc, s) => acc + (histRequirements[hd]?.[s] || 0), 0) / fteDivisor;
+1820-          let compDayTotal = 0;
+1821-          const rawShifts: Record<string, number> = {};
+1822-          
+1823-          Object.entries(compositionShifts).forEach(([code, sInfo]) => {
+1824-             const slotsInShift = slots.filter(slot => isSlotInShift(slot, sInfo.start, sInfo.end));
+1825-             const values = slotsInShift.map(slot => histRequirements[hd]?.[slot] || 0);
+1826-             let val = 0;
+1827-             if (values.length > 0) {
+1828-                if (compositionMode === "peak") {
+1829-                   val = Math.max(...values, 0);
+1830-                } else {
+1831-                   const sum = values.reduce((acc, v) => acc + v, 0);
+1832-                   val = Number((sum / values.length).toFixed(1));
+1833-                }
+1834-             }
+1835-             rawShifts[code] = val;
+1836-             compDayTotal += val;
+1837-          });
+1838-          
+1839-          histFinalShiftsRounded[hd] = {};
+1840-          Object.keys(compositionShifts).forEach(code => {
+1841-             let finalVal = rawShifts[code];
+1842-             if (compDayTotal > fteTarget && compDayTotal > 0) {
+1843-                 finalVal = finalVal * (fteTarget / compDayTotal);
+1844-             }
+1845-             histFinalShiftsRounded[hd][code] = rawShifts[code] > 0 ? Math.max(1, Math.round(finalVal)) : 0;
+1846-          });
+1847-      });
+1848-
+1849-      // 1b. Compute Day-of-Week averages from histFinalShiftsRounded
+1850-      const dowSum: Record<number, Record<string, number>> = {};
+1851-      const dowCount: Record<number, number> = {0:0,1:0,2:0,3:0,4:0,5:0,6:0};
+1852-      Array.from({length: 7}).forEach((_, i) => {
+1853-          dowSum[i] = {};
+1854-          Object.keys(compositionShifts).forEach(code => dowSum[i][code] = 0);
+1855-      });
+1856-      const globalSum: Record<string, number> = {};
+1857-      let globalCount = 0;
+1858-      Object.keys(compositionShifts).forEach(code => globalSum[code] = 0);
+1859-
+1860-      histDays.forEach(hd => {
+1861-          const dow = parseISO(hd).getDay();
+1862-          dowCount[dow]++;
+1863-          globalCount++;
+1864-          Object.keys(compositionShifts).forEach(code => {
+1865-              dowSum[dow][code] += histFinalShiftsRounded[hd][code];
+1866-              globalSum[code] += histFinalShiftsRounded[hd][code];
+1867-          });
+1868-      });
+1869-
+1870-      // 1c. Map targets to Future Roster Days (Strictly matching the KOMPOSISI AGENT PER SHIFT table)
+1871-      let requiredSlotsPerDayPerShift: Record<string, Record<string, number>> = {};
+1872-      days.forEach(d => {
+1873-         requiredSlotsPerDayPerShift[d] = {};
+1874-         const dow = parseISO(d).getDay();
+1875-         Object.keys(compositionShifts).forEach(code => {
+1876-             if (histRequirements[d]) {
+1877-                 // Calculate composition directly from target day d to match visual table exactly
+1878-                 const fteDayTotal = slots.reduce((acc, s) => acc + (histRequirements[d]?.[s] || 0), 0) / fteDivisor;
+1879-                 
+1880-                 let compDayTotal = 0;
+1881-                 const rawShiftValues: Record<string, number> = {};
+1882-                 
+1883-                 Object.entries(compositionShifts).forEach(([cCode, sInfo]) => {
+1884-                     const slotsInShift = slots.filter(slot => isSlotInShift(slot, sInfo.start, sInfo.end));
+1885-                     const values = slotsInShift.map(slot => histRequirements[d]?.[slot] || 0);
+1886-
+1887-                      let calculatedValue = 0;
+1888-                      if (values.length > 0) {
+1889-                         if (compositionMode === "peak") {
+1890-                             calculatedValue = Math.max(...values, 0);
+1891-                         } else {
+1892-                             const sum = values.reduce((acc, v) => acc + v, 0);
+1893-                             calculatedValue = Number((sum / values.length).toFixed(1));
+1894-                         }
+1895-                      }
+1896-                      rawShiftValues[cCode] = calculatedValue;
+1897-                      compDayTotal += calculatedValue;
+1898-                 });
+1899-
+1900-                 let val = rawShiftValues[code] || 0;
+1901-                 if (compDayTotal > fteDayTotal && compDayTotal > 0) {
+1902-                     val = val * (fteDayTotal / compDayTotal);
+1903-                 }
+1904-                 requiredSlotsPerDayPerShift[d][code] = (rawShiftValues[code] || 0) > 0 ? Math.max(1, Math.round(val)) : 0;
+1905-             } else if (dowCount[dow] > 0) {
+1906-                 requiredSlotsPerDayPerShift[d][code] = Math.round(dowSum[dow][code] / dowCount[dow]);
+1907-             } else if (globalCount > 0) {
+1908-                 requiredSlotsPerDayPerShift[d][code] = Math.round(globalSum[code] / globalCount);
+1909-             } else {
+1910-                 requiredSlotsPerDayPerShift[d][code] = 0;
+1911-             }
+1912-         });
+1913-      });
+1914-
+1915-      // 1d. If actual agents are fewer than requirements, scale down and distribute shift targets proportionally per day
+1916-       // to ensure we don't starve minor/night shifts and cover all interval ranges evenly.
+1917-       const activeAgentsCountVisible = agentsToSchedule.filter(a => !forcedOffAgents.has(a.id)).length;
+1918-       if (activeAgentsCountVisible > 0 && days.length > 0) {
+1919-           const typicalDailyCap = Math.max(1, Math.round(activeAgentsCountVisible * (maxWorkingDaysPerAgent / days.length)));
+1920-           days.forEach(d => {
+1921-               let totalReqOnDay = 0;
+1922-               Object.keys(compositionShifts).forEach(code => {
+1923-                   totalReqOnDay += requiredSlotsPerDayPerShift[d]?.[code] || 0;
+1924-               });
+1925-
+1926-               if (totalReqOnDay > typicalDailyCap && totalReqOnDay > 0) {
+1927-                   const sortedShifts = Object.keys(compositionShifts).sort((a, b) => {
+1928-                       return (requiredSlotsPerDayPerShift[d]?.[b] || 0) - (requiredSlotsPerDayPerShift[d]?.[a] || 0);
+1929-                   });

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAppStore } from '../lib/store';
 import { format } from 'date-fns';
-import { checkConnection, updateDbConfig, fetchMasterShifts, upsertMasterShifts, fetchUniqueProjects } from '../lib/api';
+import { checkConnection, updateDbConfig, fetchMasterShifts, upsertMasterShifts, fetchUniqueProjects, fetchUniqueChannelsForProject } from '../lib/api';
 import { 
   Settings as SettingsIcon, 
   Database, 
@@ -25,13 +25,39 @@ import {
   Layout,
   HardDrive,
   FileCheck,
-  Wifi
+  Wifi,
+  Palette
 } from 'lucide-react';
 
 interface SettingsProps {
   initialModule?: string;
   initialTab?: string;
 }
+
+const SHIFT_DEFAULTS: Record<string, { s: string; e: string; w: number }> = {
+  P1: { s: "06:00", e: "15:00", w: 1 },
+  P2: { s: "07:00", e: "16:00", w: 2 },
+  P3: { s: "08:00", e: "17:00", w: 3 },
+  P4: { s: "09:00", e: "18:00", w: 4 },
+  P9: { s: "10:00", e: "19:00", w: 5 },
+  S1: { s: "11:00", e: "20:00", w: 6 },
+  S2: { s: "12:00", e: "21:00", w: 7 },
+  S3: { s: "12:30", e: "21:30", w: 8 },
+  S4: { s: "13:00", e: "22:00", w: 9 },
+  S6: { s: "14:00", e: "23:00", w: 10 },
+  S7: { s: "15:00", e: "00:00", w: 11 },
+  S5: { s: "16:00", e: "01:00", w: 12 },
+  M3: { s: "21:00", e: "06:00", w: 13 },
+  M1: { s: "22:00", e: "07:00", w: 14 }
+};
+
+const DEFAULT_PROJECT_CHANNELS: Record<string, string[]> = {
+  "Project Alpha": ["Voice", "Email", "Leader"],
+  "Project Beta": ["Voice", "Non-Voice", "Chat"],
+  "Customer Care": ["Chat", "Email", "Digital"],
+  "Technical Support": ["Voice", "Chat", "Email"],
+  "VIP Concierge": ["Digital", "Call", "Email"],
+};
 
 export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab }) => {
   const { settings, updateSettings, syncSettingsFromDB } = useAppStore();
@@ -80,6 +106,18 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
           if (!pList.includes(selectedShiftProject)) {
             setSelectedShiftProject(pList[0]);
           }
+          if (!pList.includes(selectedBreakProject)) {
+            setSelectedBreakProject(pList[0]);
+          }
+          if (!pList.includes(selectedFastingProject)) {
+            setSelectedFastingProject(pList[0]);
+          }
+          if (!pList.includes(selectedOpsProject)) {
+            setSelectedOpsProject(pList[0]);
+          }
+          if (!pList.includes(selectedActivityProject)) {
+            setSelectedActivityProject(pList[0]);
+          }
         }
       } catch (err) {
         console.warn("Could not load database project list, using defaults.", err);
@@ -124,14 +162,56 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
     };
   }, [activeTab, selectedShiftProject]);
 
-  // Holiday State
-  const [holidays, setHolidays] = useState(Object.entries(settings.holidays).map(([k, v]) => ({ date: k, desc: v })));
+  // Holiday State Helpers
+  const parseHolidayValue = (v: any): { desc: string; type: 'public' | 'cuti' } => {
+    if (!v) return { desc: '', type: 'public' };
+    if (typeof v === 'object' && v !== null) {
+      return {
+        desc: v.desc || '',
+        type: v.type === 'cuti' ? 'cuti' : 'public'
+      };
+    }
+    const str = String(v);
+    if (str.startsWith('{') && str.endsWith('}')) {
+      try {
+        const parsed = JSON.parse(str);
+        return {
+          desc: parsed.desc || '',
+          type: parsed.type === 'cuti' ? 'cuti' : 'public'
+        };
+      } catch (_) {}
+    }
+    if (str.startsWith('CUTI:')) {
+      return { desc: str.slice(5), type: 'cuti' };
+    }
+    if (str.startsWith('PUBLIC:')) {
+      return { desc: str.slice(7), type: 'public' };
+    }
+    if (str.toLowerCase().includes('cuti bersama') || str.toLowerCase().includes('cuti')) {
+      return { desc: str, type: 'cuti' };
+    }
+    return { desc: str, type: 'public' };
+  };
+
+  const [holidays, setHolidays] = useState(() => {
+    return Object.entries(settings.holidays || {}).map(([k, v]) => {
+      const parsed = parseHolidayValue(v);
+      return { date: k, desc: parsed.desc, type: parsed.type };
+    });
+  });
   const [newHolDate, setNewHolDate] = useState('');
   const [newHolDesc, setNewHolDesc] = useState('');
+  const [newHolType, setNewHolType] = useState<'public' | 'cuti'>('public');
   const [showBulkHol, setShowBulkHol] = useState(false);
   const [bulkHolText, setBulkHolText] = useState('');
 
   // Auto Break State
+  const [selectedBreakProject, setSelectedBreakProject] = useState("Project Alpha");
+  const [isLoadingBreakShifts, setIsLoadingBreakShifts] = useState(false);
+  const [breakShifts, setBreakShifts] = useState<{code: string; s: string; e: string; w: number}[]>(() =>
+    Object.entries(settings.shifts).map(([k, v]) => ({ code: k, ...(v as any) }))
+  );
+
   const [autoBreakStrings, setAutoBreakStrings] = useState<Record<string, string>>(() => {
     const res: Record<string, string> = {};
     Object.keys(settings.shifts).forEach(code => {
@@ -141,17 +221,208 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
   });
   const [fridayBreak, setFridayBreak] = useState(settings.fridayBreak);
 
+  // Fetch shifts for selected break project dynamically when project or activeTab matches autobreak
+  React.useEffect(() => {
+    let active = true;
+    if (activeTab === 'autobreak') {
+      const loadBreakShifts = async () => {
+        setIsLoadingBreakShifts(true);
+        try {
+          const fetched = await fetchMasterShifts(selectedBreakProject);
+          if (active) {
+            if (fetched && fetched.length > 0) {
+              const mapped = fetched.map((s: any) => ({
+                code: s.code,
+                s: s.start_time,
+                e: s.end_time,
+                w: s.weight || 1
+              }));
+              setBreakShifts(mapped);
+              
+              // Ensure autoBreakStrings has these keys in state so typing in them works
+              setAutoBreakStrings(prev => {
+                const updated = { ...prev };
+                mapped.forEach((s: any) => {
+                  if (updated[s.code] === undefined) {
+                    updated[s.code] = (settings.autoBreak[s.code] || []).join(', ');
+                  }
+                });
+                return updated;
+              });
+            } else {
+              // Fallback default shifts depending on project
+              const defaultShifts = Object.entries(settings.shifts).map(([k, v]) => ({ code: k, ...(v as any) }));
+              setBreakShifts(defaultShifts);
+            }
+          }
+        } catch (error) {
+          console.error("Failed to load project master shifts from Supabase for break:", error);
+          if (active) {
+            const defaultShifts = Object.entries(settings.shifts).map(([k, v]) => ({ code: k, ...(v as any) }));
+            setBreakShifts(defaultShifts);
+          }
+        } finally {
+          if (active) setIsLoadingBreakShifts(false);
+        }
+      };
+      loadBreakShifts();
+    }
+    return () => {
+      active = false;
+    };
+  }, [activeTab, selectedBreakProject]);
+
+  // Ops Hour (Biz) Project Channels State
+  const [selectedOpsProject, setSelectedOpsProject] = useState("Project Alpha");
+  const [isLoadingOpsChannels, setIsLoadingOpsChannels] = useState(false);
+  const [opsChannels, setOpsChannels] = useState<string[]>([]);
+
+  useEffect(() => {
+    let active = true;
+    
+    if (activeTab === 'biz') {
+      const loadProjectChannels = async () => {
+        setIsLoadingOpsChannels(true);
+        try {
+          const fetchedChannels = await fetchUniqueChannelsForProject(selectedOpsProject);
+          if (active) {
+            setOpsChannels(fetchedChannels || []);
+          }
+        } catch (error) {
+          console.error("Failed to load project unique channels: ", error);
+          if (active) {
+            setOpsChannels([]);
+          }
+        } finally {
+          if (active) {
+            setIsLoadingOpsChannels(false);
+          }
+        }
+      };
+      loadProjectChannels();
+    } else {
+      setOpsChannels([]);
+    }
+    return () => {
+      active = false;
+    };
+  }, [activeTab, selectedOpsProject]);
+
   // Puasa State
+  const [selectedFastingProject, setSelectedFastingProject] = useState("Project Alpha");
+  const [isLoadingFastingShifts, setIsLoadingFastingShifts] = useState(false);
+  const [fastingProjectShifts, setFastingProjectShifts] = useState<{code: string; s: string; e: string; w: number}[]>(() =>
+    Object.entries(settings.shifts).map(([k, v]) => ({ code: k, ...(v as any) }))
+  );
+  const [autoReduceMinutes, setAutoReduceMinutes] = useState(60);
+  const [autoReduceBreakMinutes, setAutoReduceBreakMinutes] = useState(30);
+
   const [puasa, setPuasa] = useState(settings.puasa);
   const [puasaShifts, setPuasaShifts] = useState(settings.puasaShifts);
   const [newPuasaStart, setNewPuasaStart] = useState('');
   const [newPuasaEnd, setNewPuasaEnd] = useState('');
 
+  // Subtract minutes utility for automatic duration calculation
+  const subtractMinutesFromTime = (timeStr: string, mins: number): string => {
+    if (!timeStr || !timeStr.includes(':')) return timeStr;
+    const [h, m] = timeStr.split(':').map(Number);
+    if (isNaN(h) || isNaN(m)) return timeStr;
+    
+    let totalMins = h * 60 + m - mins;
+    if (totalMins < 0) {
+      totalMins += 24 * 60; // wrap around day
+    }
+    const newH = Math.floor(totalMins / 60) % 24;
+    const newM = totalMins % 60;
+    return `${String(newH).padStart(2, '0')}:${String(newM).padStart(2, '0')}`;
+  };
+
+  // Auto applies fasting schedules by reducing daily shift duration and break duration
+  const handleAutoApplyFastingRules = () => {
+    const updatedPuasaShifts = { ...puasaShifts };
+    fastingProjectShifts.forEach(s => {
+      // Start time remains unchanged
+      const fastingStart = s.s;
+      // End time is cut by autoReduceMinutes (automatic work hour discount)
+      const fastingEnd = subtractMinutesFromTime(s.e, autoReduceMinutes);
+      // Break is set to autoReduceBreakMinutes 
+      updatedPuasaShifts[s.code] = {
+        s: fastingStart,
+        e: fastingEnd,
+        b: autoReduceBreakMinutes
+      };
+    });
+    setPuasaShifts(updatedPuasaShifts);
+    showStatus("Jam kerja & istirahat puasa berhasil dihitung otomatis! Silakan klik 'Update Sync' untuk menyimpan.");
+  };
+
+  // Fetch shifts for selected fasting project dynamically when activeTab is puasa or selectedFastingProject changes
+  React.useEffect(() => {
+    let active = true;
+    if (activeTab === 'puasa') {
+      const loadFastingShifts = async () => {
+        setIsLoadingFastingShifts(true);
+        try {
+          const fetched = await fetchMasterShifts(selectedFastingProject);
+          if (active) {
+            if (fetched && fetched.length > 0) {
+              const mapped = fetched.map((s: any) => ({
+                code: s.code,
+                s: s.start_time,
+                e: s.end_time,
+                w: s.weight || 1
+              }));
+              setFastingProjectShifts(mapped);
+            } else {
+              // Fallback
+              const defaultShifts = Object.entries(settings.shifts).map(([k, v]) => ({ code: k, ...(v as any) }));
+              setFastingProjectShifts(defaultShifts);
+            }
+          }
+        } catch (error) {
+          console.error("Failed to load project master shifts for fasting page:", error);
+          if (active) {
+            const defaultShifts = Object.entries(settings.shifts).map(([k, v]) => ({ code: k, ...(v as any) }));
+            setFastingProjectShifts(defaultShifts);
+          }
+        } finally {
+          if (active) setIsLoadingFastingShifts(false);
+        }
+      };
+      loadFastingShifts();
+    }
+    return () => {
+      active = false;
+    };
+  }, [activeTab, selectedFastingProject]);
+
   // Roles State
   const [roles, setRoles] = useState(settings.roles);
 
   // Activities State
-  const [activities, setActivities] = useState(settings.activities || {});
+  const [selectedActivityProject, setSelectedActivityProject] = useState("Project Alpha");
+  const [shiftBarColor, setShiftBarColor] = useState(settings.shiftBarColor || "bg-slate-200/70");
+  const [newActivityCode, setNewActivityCode] = useState('');
+  const [newActivityLabel, setNewActivityLabel] = useState('');
+  const [newActivityDuration, setNewActivityDuration] = useState('2'); // 30 mins
+  const [newActivityColor, setNewActivityColor] = useState('bg-rose-500');
+  const [newActivityCategory, setNewActivityCategory] = useState('work'); // 'work' or 'break'
+
+  const [activities, setActivities] = useState<Record<string, Record<string, { label: string; color: string; duration?: string; category?: string }>>>(() => {
+    const raw = settings.activities || {};
+    const testProjects = ["Project Alpha", "Project Beta", "Customer Care", "Technical Support", "VIP Concierge"];
+    const initial: Record<string, any> = {};
+    testProjects.forEach(proj => {
+      const projRaw = raw[proj] || {};
+      initial[proj] = {
+        "LB": { label: projRaw["LB"]?.label || "Lunch Break", color: projRaw["LB"]?.color || "bg-active-red", duration: projRaw["LB"]?.duration || "4", category: "break" },
+        "SB": { label: projRaw["SB"]?.label || "Short Break", color: projRaw["SB"]?.color || "bg-amber-400", duration: projRaw["SB"]?.duration || "1", category: "break" },
+        "MT": { label: projRaw["MT"]?.label || "Meeting", color: projRaw["MT"]?.color || "bg-black", duration: projRaw["MT"]?.duration || "2", category: "work" },
+        "TR": { label: projRaw["TR"]?.label || "Training", color: projRaw["TR"]?.color || "bg-indigo-600", duration: projRaw["TR"]?.duration || "4", category: "work" },
+      };
+    });
+    return initial;
+  });
 
   // SQL Infrastructure State (Now Supabase)
   const [supabaseConfig, setSupabaseConfig] = useState(() => {
@@ -184,6 +455,59 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
   const [isTestingDb, setIsTestingDb] = useState(false);
   const [dbUrlInput, setDbUrlInput] = useState('');
   const [isSavingDb, setIsSavingDb] = useState(false);
+
+  // PostgreSQL Automatic Table Provisioner State
+  const [postgresConnectionString, setPostgresConnectionString] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('postgres_connection_string') || '';
+    }
+    return '';
+  });
+  const [isInitializingTables, setIsInitializingTables] = useState(false);
+  const [initResult, setInitResult] = useState<{ status: 'idle' | 'success' | 'error'; message?: string }>({ status: 'idle' });
+
+  const handleInitializeTables = async () => {
+    if (!postgresConnectionString.trim()) {
+      alert("Harap masukkan PostgreSQL Connection URI (DATABASE_URL) terlebih dahulu!");
+      return;
+    }
+    
+    setIsInitializingTables(true);
+    setInitResult({ status: 'idle' });
+    showStatus("Menghubungkan ke PostgreSQL & Membuat tabel... ⏳");
+
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('postgres_connection_string', postgresConnectionString.trim());
+      }
+
+      const response = await fetch("/api/db/initialize-tables", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ connectionString: postgresConnectionString.trim() })
+      });
+
+      const resData = await response.json();
+      if (resData.status === "success") {
+        setInitResult({ status: 'success', message: resData.message });
+        showStatus("Tabel berhasil dibuat di Supabase! 🎉");
+        alert(resData.message);
+      } else {
+        setInitResult({ status: 'error', message: resData.error });
+        showStatus("Gagal menginisialisasi tabel ❌");
+        alert("Gagal menginisialisasi tabel: " + resData.error);
+      }
+    } catch (err: any) {
+      console.error(err);
+      setInitResult({ status: 'error', message: err.message || "Failed to contact setup API" });
+      showStatus("Koneksi gagal ❌");
+      alert("Error: " + (err.message || "Gagal menghubungi backend API"));
+    } finally {
+      setIsInitializingTables(false);
+    }
+  };
 
   const handleTestConnection = async () => {
     setIsTestingDb(true);
@@ -251,13 +575,36 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
     setKey(settings.apiKey);
     setChannels(settings.channels.join(', '));
     setShifts(Object.entries(settings.shifts).map(([k, v]) => ({ code: k, ...(v as any) })));
-    setHolidays(Object.entries(settings.holidays).map(([k, v]) => ({ date: k, desc: v })));
+    setHolidays(Object.entries(settings.holidays || {}).map(([k, v]) => {
+      const parsed = parseHolidayValue(v);
+      return { date: k, desc: parsed.desc, type: parsed.type };
+    }));
     setFridayBreak(settings.fridayBreak);
     setPuasa(settings.puasa);
     setPuasaShifts(settings.puasaShifts);
     setRoles(settings.roles);
     setBizRules(settings.bizRules);
-    setActivities(settings.activities || {});
+    
+    const rawActs = settings.activities || {};
+    const hasProjectKeys = Object.keys(rawActs).some(key => PROJECTS.includes(key));
+    if (!hasProjectKeys) {
+      const nested: Record<string, any> = {};
+      PROJECTS.forEach(proj => {
+        nested[proj] = JSON.parse(JSON.stringify(rawActs));
+      });
+      setActivities(nested);
+    } else {
+      const parsed: Record<string, any> = {};
+      PROJECTS.forEach(proj => {
+        parsed[proj] = rawActs[proj] || {
+          "LB": { label: "Lunch Break", color: "bg-rose-500", duration: "4", category: "break" },
+          "SB": { label: "Short Break", color: "bg-amber-400", duration: "1", category: "break" },
+          "MT": { label: "Meeting", color: "bg-slate-950", duration: "2", category: "work" },
+          "TR": { label: "Training", color: "bg-indigo-600", duration: "4", category: "work" },
+        };
+      });
+      setActivities(parsed);
+    }
     
     // Auto break strings need special handling
     const res: Record<string, string> = {};
@@ -278,7 +625,7 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
         }));
       }
     }
-  }, [settings]);
+  }, [settings, PROJECTS]);
 
   const showStatus = (msg: string) => {
     setSaveStatus(msg);
@@ -387,7 +734,7 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
   };
 
   const handleSaveActivities = () => {
-    updateSettings({ activities });
+    updateSettings({ activities, shiftBarColor });
     showStatus("Activity Settings saved successfully! ✅");
   };
 
@@ -395,7 +742,7 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
     const newHolidays: any = {};
     holidays.forEach(h => {
       if (h.date && h.desc) {
-        newHolidays[h.date] = h.desc;
+        newHolidays[h.date] = { desc: h.desc, type: h.type || 'public' };
       }
     });
     updateSettings({ holidays: newHolidays });
@@ -411,18 +758,41 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
 
       if (finalParts.length >= 2) {
         const dateStr = finalParts[0].trim().replace(/\//g, '-');
-        return { date: dateStr, desc: finalParts[1].trim() };
+        const descStr = finalParts[1].trim();
+        let type: 'public' | 'cuti' = 'public';
+        
+        // checking third element or checking contains "cuti" or "bersama"
+        if (finalParts[2]) {
+          const typeStr = finalParts[2].trim().toLowerCase();
+          if (typeStr === 'cuti' || typeStr === 'cuti_bersama' || typeStr.includes('bersama')) {
+            type = 'cuti';
+          }
+        } else if (descStr.toLowerCase().includes('cuti bersama') || descStr.toLowerCase().includes('cuti')) {
+          type = 'cuti';
+        }
+        
+        return { date: dateStr, desc: descStr, type };
       }
       return null;
-    }).filter(item => item !== null && !isNaN(new Date(item.date).getTime())) as {date: string, desc: string}[];
+    }).filter(item => item !== null && !isNaN(new Date(item.date).getTime())) as {date: string, desc: string, type: 'public' | 'cuti'}[];
     
     if (newItems.length > 0) {
-      setHolidays([...holidays, ...newItems]);
+      const mergedHolidays = [...holidays, ...newItems];
+      setHolidays(mergedHolidays);
+      
+      const newHolidaysObj: Record<string, any> = {};
+      mergedHolidays.forEach(h => {
+        if (h.date && h.desc) {
+          newHolidaysObj[h.date] = { desc: h.desc, type: h.type || 'public' };
+        }
+      });
+      updateSettings({ holidays: newHolidaysObj });
+      
       setBulkHolText('');
       setShowBulkHol(false);
-      showStatus(`Imported ${newItems.length} holidays! ✅`);
+      showStatus(`Imported & Saved ${newItems.length} holidays successfully! ✅`);
     } else {
-      alert("Invalid format. Use: YYYY-MM-DD;Description (one per line)");
+      alert("Format salah atau tidak valid. Gunakan format: YYYY-MM-DD,Nama Hari Libur,Tipe (Contoh: 2026-06-05,Hari Raya Natal,public atau 2026-06-05,Cuti Bersama,cuti)");
     }
   };
 
@@ -504,54 +874,38 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
   return (
     <div className="h-full bg-slate-50 overflow-y-auto p-4 lg:p-10">
       <div className="max-w-7xl mx-auto">
-        {/* Module Switcher Header */}
-        <div className="flex flex-wrap gap-2 mb-10 bg-white p-2 rounded-2xl border border-gray-100 shadow-sm w-fit sticky top-0 md:relative z-30">
-          {modules.map((m) => (
-            <button
-              key={m.id}
-              onClick={() => handleModuleSwitch(m.id)}
-              className={`flex items-center gap-2.5 px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeModule === m.id ? 'bg-slate-950 text-white shadow-xl shadow-slate-200 scale-105' : 'text-slate-400 hover:text-slate-950 hover:bg-slate-50'}`}
-            >
-              <m.icon size={16} />
-              {m.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 px-1">
-          <div>
-            <h3 className="m-0 text-slate-900 font-black text-2xl flex items-center gap-3 tracking-tighter">
-              <div className="p-2.5 bg-white border border-slate-200 shadow-sm rounded-xl">
-                <SettingsIcon size={22} className="text-rose-600" />
-              </div>
-              {activeModule === 'infra' ? 'INFRA SETTINGS' : `${activeModule.toUpperCase()} SETTINGS`}
-            </h3>
-            <p className="text-slate-500 text-xs mt-1.5 font-bold uppercase tracking-widest opacity-60">
-              {activeModule === 'workforce' && 'WFM Engine & Operational Rules'}
-              {activeModule === 'infra' && 'SQL DATABASE & SYSTEM ENDPOINTS'}
-              {activeModule === 'hc' && 'Human Capital & Personnel Registry'}
-              {activeModule === 'security' && 'Identity Lifecycle & Security Gates'}
-              {activeModule === 'analytics' && 'Business Intelligence & KPI Kernels'}
-            </p>
+        {/* Module Switcher Header & Save Button aligned at top */}
+        <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-10">
+          <div className="flex flex-wrap gap-2 bg-white p-2 rounded-2xl border border-gray-100 shadow-sm w-fit sticky top-0 md:relative z-30">
+            {modules.map((m) => (
+              <button
+                key={m.id}
+                onClick={() => handleModuleSwitch(m.id)}
+                className={`flex items-center gap-2.5 px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeModule === m.id ? 'bg-slate-950 text-white shadow-xl shadow-slate-200 scale-105' : 'text-slate-400 hover:text-slate-950 hover:bg-slate-50'}`}
+              >
+                <m.icon size={16} />
+                {m.label}
+              </button>
+            ))}
           </div>
 
-          <div className="flex items-center gap-3 w-full md:w-auto">
+          <div className="flex items-center gap-3 w-full lg:w-auto px-1">
             {activeModule === 'workforce' && (
               <>
-                {activeTab === 'shift' && <button onClick={handleSaveShifts} className="flex-1 md:flex-none px-6 py-2.5 bg-rose-600 text-white font-black rounded-xl hover:bg-rose-700 shadow-lg shadow-rose-100 transition-all flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest text-nowrap"><Save size={16} /> Save Shift Rules</button>}
-                {activeTab === 'roles' && <button onClick={handleSaveRoles} className="flex-1 md:flex-none px-6 py-2.5 bg-rose-600 text-white font-black rounded-xl hover:bg-rose-700 shadow-lg shadow-rose-100 transition-all flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest text-nowrap"><Save size={16} /> Update Permissions</button>}
-                {activeTab === 'holiday' && <button onClick={handleSaveHolidays} className="flex-1 md:flex-none px-6 py-2.5 bg-rose-600 text-white font-black rounded-xl hover:bg-rose-700 shadow-lg shadow-rose-100 transition-all flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest text-nowrap"><Save size={16} /> Update Calendar</button>}
-                {activeTab === 'autobreak' && <button onClick={handleSaveAutoBreak} className="flex-1 md:flex-none px-6 py-2.5 bg-rose-600 text-white font-black rounded-xl hover:bg-rose-700 shadow-lg shadow-rose-100 transition-all flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest text-nowrap"><Save size={16} /> Save Break Rules</button>}
-                {activeTab === 'puasa' && <button onClick={handleSavePuasa} className="flex-1 md:flex-none px-6 py-2.5 bg-rose-600 text-white font-black rounded-xl hover:bg-rose-700 shadow-lg shadow-rose-100 transition-all flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest text-nowrap"><Save size={16} /> Update Sync</button>}
-                {activeTab === 'biz' && <button onClick={handleSaveBiz} className="flex-1 md:flex-none px-6 py-2.5 bg-rose-600 text-white font-black rounded-xl hover:bg-rose-700 shadow-lg shadow-rose-100 transition-all flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest text-nowrap"><Save size={16} /> Save Business Rules</button>}
-                {activeTab === 'activities' && <button onClick={handleSaveActivities} className="flex-1 md:flex-none px-6 py-2.5 bg-rose-600 text-white font-black rounded-xl hover:bg-rose-700 shadow-lg shadow-rose-100 transition-all flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest text-nowrap"><Save size={16} /> Save Activities</button>}
+                {activeTab === 'shift' && <button onClick={handleSaveShifts} className="flex-1 lg:flex-none px-6 py-3 bg-rose-600 text-white font-black rounded-xl hover:bg-rose-700 shadow-lg shadow-rose-100 transition-all flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest text-nowrap"><Save size={16} /> Save Shift Rules</button>}
+                {activeTab === 'roles' && <button onClick={handleSaveRoles} className="flex-1 lg:flex-none px-6 py-3 bg-rose-600 text-white font-black rounded-xl hover:bg-rose-700 shadow-lg shadow-rose-100 transition-all flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest text-nowrap"><Save size={16} /> Update Permissions</button>}
+                {activeTab === 'holiday' && <button onClick={handleSaveHolidays} className="flex-1 lg:flex-none px-6 py-3 bg-rose-600 text-white font-black rounded-xl hover:bg-rose-700 shadow-lg shadow-rose-100 transition-all flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest text-nowrap"><Save size={16} /> Update Calendar</button>}
+                {activeTab === 'autobreak' && <button onClick={handleSaveAutoBreak} className="flex-1 lg:flex-none px-6 py-3 bg-rose-600 text-white font-black rounded-xl hover:bg-rose-700 shadow-lg shadow-rose-100 transition-all flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest text-nowrap"><Save size={16} /> Save Break Rules</button>}
+                {activeTab === 'puasa' && <button onClick={handleSavePuasa} className="flex-1 lg:flex-none px-6 py-3 bg-rose-600 text-white font-black rounded-xl hover:bg-rose-700 shadow-lg shadow-rose-100 transition-all flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest text-nowrap"><Save size={16} /> Update Sync</button>}
+                {activeTab === 'biz' && <button onClick={handleSaveBiz} className="flex-1 lg:flex-none px-6 py-3 bg-rose-600 text-white font-black rounded-xl hover:bg-rose-700 shadow-lg shadow-rose-100 transition-all flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest text-nowrap"><Save size={16} /> Save Business Rules</button>}
+                {activeTab === 'activities' && <button onClick={handleSaveActivities} className="flex-1 lg:flex-none px-6 py-3 bg-rose-600 text-white font-black rounded-xl hover:bg-rose-700 shadow-lg shadow-rose-100 transition-all flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest text-nowrap"><Save size={16} /> Save Activities</button>}
               </>
             )}
             {activeModule !== 'workforce' && (
               <button 
                 disabled={activeModule === 'infra' && isSavingDb}
                 onClick={activeModule === 'infra' ? handleSaveDbUrl : () => showStatus("Module configuration updated!")} 
-                className="flex-1 md:flex-none px-6 py-2.5 bg-slate-950 text-white font-black rounded-xl hover:bg-black shadow-lg shadow-slate-200 transition-all flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest text-nowrap"
+                className="flex-1 lg:flex-none px-6 py-3 bg-slate-950 text-white font-black rounded-xl hover:bg-black shadow-lg shadow-slate-200 transition-all flex items-center justify-center gap-2 text-[10px] uppercase tracking-widest text-nowrap"
               >
                 {activeModule === 'infra' && isSavingDb ? <RefreshCw size={16} className="animate-spin" /> : <Save size={16} />}
                 Commit Configuration
@@ -592,107 +946,383 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
 
               <div className="p-6 md:p-10">
                 {activeTab === 'biz' && (
-              <div className="animate-in fade-in slide-in-from-top-4 duration-300 max-w-5xl mx-auto">
-                <div className="bg-slate-50 p-6 md:p-8 rounded-[2rem] mb-10 border border-slate-200 shadow-sm">
-                   <h4 className="m-0 mb-5 text-slate-900 text-base font-black flex items-center gap-2.5 tracking-widest uppercase">
-                     <Clock size={18} className="text-rose-600" />
-                     CHANNEL OPERATIONAL HOURS
-                   </h4>
-                   <p className="text-[11px] text-slate-400 font-bold uppercase tracking-tight mb-8">Define active service windows per delivery stream</p>
-                   
-                   <div className="space-y-4">
-                     {settings.channels.map(ch => {
-                        const rule = bizRules.operatingHours[ch] || { start: '00:00', end: '23:59', closed: false };
-                        return (
-                          <div key={ch} className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-8 items-center bg-white p-5 rounded-2xl border border-slate-100 shadow-sm transition-colors">
-                            <div className="font-black text-slate-900 text-[11px] uppercase tracking-widest">{ch}</div>
-                            <div className="flex items-center gap-3">
-                              <Sun size={14} className="text-rose-600 shrink-0" />
-                              <input 
-                                type="time" 
-                                className={`flex-1 p-2.5 border rounded-xl text-xs font-black font-mono outline-none focus:border-rose-500 ${rule.closed ? 'opacity-20 pointer-events-none bg-slate-50' : 'bg-white border-slate-200'}`}
-                                value={rule.start}
-                                onChange={e => setBizRules({
-                                  ...bizRules,
-                                  operatingHours: { ...bizRules.operatingHours, [ch]: { ...rule, start: e.target.value } }
-                                })}
-                              />
-                            </div>
-                            <div className="flex items-center gap-3">
-                              <Moon size={14} className="text-slate-400 shrink-0" />
-                              <input 
-                                type="time" 
-                                className={`flex-1 p-2.5 border rounded-xl text-xs font-black font-mono outline-none focus:border-rose-500 ${rule.closed ? 'opacity-20 pointer-events-none bg-slate-50' : 'bg-white border-slate-200'}`}
-                                value={rule.end}
-                                onChange={e => setBizRules({
-                                  ...bizRules,
-                                  operatingHours: { ...bizRules.operatingHours, [ch]: { ...rule, end: e.target.value } }
-                                })}
-                              />
-                            </div>
-                            <div className="flex justify-end">
-                              <label className="flex items-center gap-3 cursor-pointer group">
-                                <span className={`text-[10px] font-black uppercase tracking-widest ${rule.closed ? 'text-rose-600' : 'text-slate-300'}`}>Closed</span>
-                                <input 
-                                  type="checkbox"
-                                  checked={rule.closed}
-                                  onChange={e => setBizRules({
-                                    ...bizRules,
-                                    operatingHours: { ...bizRules.operatingHours, [ch]: { ...rule, closed: e.target.checked } }
-                                  })}
-                                  className="w-4 h-4 text-rose-600 rounded border-slate-300 focus:ring-rose-500"
-                                />
-                              </label>
-                            </div>
-                          </div>
-                        );
-                     })}
-                   </div>
+              <div className="animate-in fade-in slide-in-from-top-4 duration-300 max-w-5xl mx-auto space-y-6">
+                {/* Header & Filter Project */}
+                <div className="bg-slate-50 p-6 md:p-8 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                  <div>
+                    <h4 className="m-0 font-black text-rose-950 text-base uppercase tracking-widest flex items-center gap-2.5">
+                      <Clock size={18} className="text-rose-600 animate-pulse" /> CHANNEL OPERATIONAL HOURS
+                    </h4>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight mt-1.5 px-7">
+                      Tentukan jam operasional saluran komunikasi aktif berdasarkan proyek pilihan Anda
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Pilih Project:</span>
+                    <select
+                      className="p-2.5 px-4 bg-white border border-slate-200 rounded-xl text-[10px] font-black text-rose-600 uppercase tracking-widest cursor-pointer focus:ring-1 focus:ring-rose-500 outline-none shadow-sm"
+                      value={selectedOpsProject}
+                      onChange={(e) => setSelectedOpsProject(e.target.value)}
+                    >
+                      {PROJECTS.map((pj) => (
+                        <option key={pj} value={pj}>{pj}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Content Area */}
+                <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-slate-200 shadow-sm">
+                  {isLoadingOpsChannels ? (
+                    <div className="py-12 flex flex-col items-center justify-center gap-2">
+                      <RefreshCw size={24} className="animate-spin text-rose-600" />
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest animate-pulse">Memuat database channel...</span>
+                    </div>
+                  ) : opsChannels.length === 0 ? (
+                    <div className="py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-center text-slate-400 font-bold text-[10px] uppercase tracking-widest">
+                      Tidak ada saluran komunikasi aktif terdaftar untuk proyek ini.
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {opsChannels.map(ch => {
+                         const key = `${selectedOpsProject}_${ch}`;
+                         const rule = bizRules.operatingHours[key] || bizRules.operatingHours[ch] || { start: '00:00', end: '23:59', closed: false };
+                         return (
+                           <div key={ch} className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-8 items-center bg-slate-50 p-5 rounded-2xl border border-slate-100 shadow-sm transition-all hover:bg-slate-100">
+                             <div className="font-black text-slate-900 text-[11px] uppercase tracking-widest flex items-center gap-1.5">
+                               <div className="w-1.5 h-1.5 rounded-full bg-rose-600 animate-pulse"></div>
+                               {ch}
+                             </div>
+                             <div className="flex items-center gap-3">
+                               <Sun size={14} className="text-rose-600 shrink-0" />
+                               <input 
+                                 type="time" 
+                                 className={`flex-1 p-2.5 border rounded-xl text-xs font-black font-mono outline-none focus:border-rose-500 ${rule.closed ? 'opacity-20 pointer-events-none bg-slate-50' : 'bg-white border-slate-200'}`}
+                                 value={rule.start}
+                                 onChange={e => setBizRules({
+                                   ...bizRules,
+                                   operatingHours: { ...bizRules.operatingHours, [key]: { ...rule, start: e.target.value } }
+                                 })}
+                               />
+                             </div>
+                             <div className="flex items-center gap-3">
+                               <Moon size={14} className="text-slate-400 shrink-0" />
+                               <input 
+                                 type="time" 
+                                 className={`flex-1 p-2.5 border rounded-xl text-xs font-black font-mono outline-none focus:border-rose-500 ${rule.closed ? 'opacity-20 pointer-events-none bg-slate-50' : 'bg-white border-slate-200'}`}
+                                 value={rule.end}
+                                 onChange={e => setBizRules({
+                                   ...bizRules,
+                                   operatingHours: { ...bizRules.operatingHours, [key]: { ...rule, end: e.target.value } }
+                                 })}
+                               />
+                             </div>
+                             <div className="flex justify-end">
+                               <label className="flex items-center gap-3 cursor-pointer group">
+                                 <span className={`text-[10px] font-black uppercase tracking-widest ${rule.closed ? 'text-rose-600' : 'text-slate-300'}`}>Closed</span>
+                                 <input 
+                                   type="checkbox"
+                                   checked={rule.closed}
+                                   onChange={e => setBizRules({
+                                     ...bizRules,
+                                     operatingHours: { ...bizRules.operatingHours, [key]: { ...rule, closed: e.target.checked } }
+                                   })}
+                                   className="w-4 h-4 text-rose-600 rounded border-slate-300 focus:ring-rose-500 cursor-pointer"
+                                 />
+                               </label>
+                             </div>
+                           </div>
+                         );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
             
-            {activeTab === 'activities' && (
-              <div className="animate-in fade-in slide-in-from-top-4 duration-300 max-w-5xl mx-auto">
-                <div className="bg-slate-50 p-6 md:p-8 rounded-[2rem] mb-10 border border-slate-200 shadow-sm relative overflow-hidden">
-                   <h4 className="m-0 mb-5 text-slate-900 text-base font-black flex items-center gap-2.5 tracking-widest uppercase relative z-10">
-                     <Zap size={18} className="text-rose-600" />
-                     ACTIVITY DEFINITIONS
-                   </h4>
-                   <div className="space-y-3 relative z-10">
-                     {Object.entries(activities).map(([code, act]: [string, any]) => (
-                       <div key={code} className="grid grid-cols-1 md:grid-cols-6 gap-3 items-center bg-white p-4 rounded-2xl border border-slate-100 shadow-sm transition-all group">
-                         <div className="font-mono font-black text-slate-400 text-[9px] bg-slate-50 px-2 py-1 rounded-md w-fit uppercase tracking-tighter">{code}</div>
-                         <div className="col-span-2">
-                           <input 
-                             placeholder="Label"
-                             className="w-full p-2.5 bg-slate-50 border border-slate-100 rounded-xl text-[11px] font-black uppercase tracking-tight outline-none focus:border-rose-500 transition-all focus:bg-white"
-                             value={act.label}
-                             onChange={(e) => setActivities({ ...activities, [code]: { ...act, label: e.target.value } })}
-                           />
-                         </div>
-                         <div>
-                           <select 
-                             className="w-full p-2.5 bg-slate-50 border border-slate-100 rounded-xl text-[10px] font-black uppercase tracking-tight outline-none focus:border-rose-500 cursor-pointer"
-                             value={act.duration || 'custom'}
-                             onChange={(e) => setActivities({ ...activities, [code]: { ...act, duration: e.target.value } })}
-                           >
-                             <option value="1">15 mins</option>
-                             <option value="2">30 mins</option>
-                             <option value="4">1 hour</option>
-                             <option value="full">Full Day</option>
-                             <option value="custom">Custom</option>
-                           </select>
-                         </div>
-                         <div className="flex gap-2 items-center col-span-2 justify-end">
-                           <div className={`w-10 h-10 rounded-xl border border-slate-100 shrink-0 shadow-sm ${act.color}`}></div>
-                           <button onClick={() => { const newActs = { ...activities }; delete newActs[code]; setActivities(newActs); }} className="p-2.5 text-slate-300 hover:text-rose-600 transition-all">
-                             <Trash2 size={16} />
-                           </button>
-                         </div>
-                       </div>
-                     ))}
-                   </div>
+             {activeTab === 'activities' && (
+              <div className="animate-in fade-in slide-in-from-top-4 duration-300 max-w-5xl mx-auto space-y-6">
+                {/* Header & Filter Project */}
+                <div className="bg-slate-50 p-6 md:p-8 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                  <div>
+                    <h4 className="m-0 font-black text-rose-950 text-base uppercase tracking-widest flex items-center gap-2.5">
+                      <Zap size={18} className="text-rose-600 animate-pulse" /> ACTIVITY CONFIGURATION
+                    </h4>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight mt-1.5 px-7">
+                      Kelola aktivitas khusus yang tersedia untuk masing-masing project
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Pilih Project:</span>
+                    <select
+                      className="p-2.5 px-4 bg-white border border-slate-200 rounded-xl text-[10px] font-black text-rose-600 uppercase tracking-widest cursor-pointer focus:ring-1 focus:ring-rose-500 outline-none shadow-sm"
+                      value={selectedActivityProject}
+                      onChange={(e) => setSelectedActivityProject(e.target.value)}
+                    >
+                      {PROJECTS.map((pj) => (
+                        <option key={pj} value={pj}>{pj}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Shift Bar Color Section */}
+                <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-slate-200 shadow-sm">
+                  <h5 className="m-0 font-black text-[11px] uppercase tracking-widest text-slate-900 mb-5 flex items-center gap-2">
+                    <Palette size={16} className="text-rose-600" /> WARNA SHIFT BAR (BACKGROUND KERJA)
+                  </h5>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight -mt-3.5 mb-5 leading-normal">
+                    Pilih warna latar belakang untuk shift kerja roster yang ditampilkan pada grid utama:
+                  </p>
+
+                  <div className="flex items-center gap-3 bg-slate-50 p-5 rounded-2xl border border-slate-100 flex-wrap">
+                    {[
+                      { class: 'bg-slate-200/70', label: 'Default Slate/Gray' },
+                      { class: 'bg-slate-300/85', label: 'Aesthetic Gray' },
+                      { class: 'bg-blue-200/60', label: 'Light Blue' },
+                      { class: 'bg-indigo-200/60', label: 'Light Indigo' },
+                      { class: 'bg-teal-200/60', label: 'Light Teal' },
+                      { class: 'bg-emerald-200/60', label: 'Light Emerald' },
+                      { class: 'bg-rose-200/60', label: 'Light Rose' },
+                      { class: 'bg-amber-200/60', label: 'Light Amber' },
+                      { class: 'bg-violet-200/60', label: 'Light Violet' },
+                      { class: 'bg-orange-200/60', label: 'Light Orange' }
+                    ].map(col => (
+                      <button
+                        key={col.class}
+                        onClick={() => {
+                          setShiftBarColor(col.class);
+                          showStatus(`Warna Shift Bar diubah menjadi ${col.label}. Klik 'Save Activities' untuk menyimpan.`);
+                        }}
+                        className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all gap-2 flex items-center border ${
+                          shiftBarColor === col.class 
+                            ? 'bg-slate-900 border-slate-900 text-white shadow-md scale-105' 
+                            : 'bg-white border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-300'
+                        }`}
+                      >
+                        <div className={`w-3.5 h-3.5 rounded-full ${col.class} border border-black/10`} />
+                        <span>{col.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Add New Activity Form */}
+                <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-slate-200 shadow-sm">
+                  <h5 className="m-0 font-black text-[11px] uppercase tracking-widest text-slate-900 mb-5 flex items-center gap-2">
+                    <Plus size={16} className="text-rose-600" /> TAMBAH AKTIVITAS BARU ({selectedActivityProject})
+                  </h5>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight -mt-3.5 mb-5 leading-normal">
+                    Buat kode aktivitas baru (misal: CO, QA, DS) untuk ditugaskan di lembar jadwal harian:
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                    <div>
+                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1.5">Code (Max 4 Huruf)</label>
+                      <input 
+                        type="text"
+                        maxLength={4}
+                        placeholder="contoh: CO"
+                        value={newActivityCode}
+                        onChange={e => setNewActivityCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-black font-mono uppercase focus:ring-1 focus:ring-rose-500 outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1.5">Label Aktivitas</label>
+                      <input 
+                        type="text"
+                        placeholder="contoh: Coaching"
+                        value={newActivityLabel}
+                        onChange={e => setNewActivityLabel(e.target.value)}
+                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-black focus:ring-1 focus:ring-rose-500 outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1.5">Durasi Default</label>
+                      <select
+                        value={newActivityDuration}
+                        onChange={e => setNewActivityDuration(e.target.value)}
+                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-black focus:ring-1 focus:ring-rose-500 outline-none cursor-pointer"
+                      >
+                        <option value="1">15 Menit</option>
+                        <option value="2">30 Menit</option>
+                        <option value="4">1 Jam</option>
+                        <option value="full">Full Day</option>
+                        <option value="custom">Custom</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1.5">Kategori</label>
+                      <select
+                        value={newActivityCategory}
+                        onChange={e => setNewActivityCategory(e.target.value)}
+                        className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-black focus:ring-1 focus:ring-rose-500 outline-none cursor-pointer"
+                      >
+                        <option value="work">Kerja (Prod)</option>
+                        <option value="break">Istirahat (Non-Prod)</option>
+                      </select>
+                    </div>
+
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block">Pilih Warna</label>
+                      <div className="flex gap-1 items-center bg-white p-1.5 rounded-xl border border-slate-200 flex-wrap">
+                        {['bg-active-red', 'bg-rose-500', 'bg-amber-400', 'bg-emerald-500', 'bg-teal-500', 'bg-sky-500', 'bg-indigo-600', 'bg-violet-700', 'bg-slate-900', 'bg-black', 'bg-orange-500'].map(col => (
+                          <button
+                            key={col}
+                            onClick={() => setNewActivityColor(col)}
+                            className={`w-4 h-4 rounded-md ${col} transition-all ${newActivityColor === col ? 'ring-2 ring-rose-500 scale-110 shadow-sm' : 'opacity-80 hover:opacity-100'}`}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex justify-end">
+                    <button
+                      onClick={() => {
+                        if (!newActivityCode.trim() || !newActivityLabel.trim()) {
+                          alert("Isi kode dan label aktivitas terlebih dahulu!");
+                          return;
+                        }
+                        const currentProjActs = activities[selectedActivityProject] || {};
+                        if (currentProjActs[newActivityCode]) {
+                          alert(`Kode aktivitas '${newActivityCode}' sudah ada untuk project ${selectedActivityProject}!`);
+                          return;
+                        }
+                        
+                        const updated = {
+                          ...activities,
+                          [selectedActivityProject]: {
+                            ...currentProjActs,
+                            [newActivityCode]: {
+                              label: newActivityLabel,
+                              color: newActivityColor,
+                              duration: newActivityDuration,
+                              category: newActivityCategory
+                            }
+                          }
+                        };
+                        setActivities(updated);
+                        setNewActivityCode('');
+                        setNewActivityLabel('');
+                        showStatus("Aktivitas didaftarkan! Klik 'Save Activities' di atas untuk menyimpan permanen.");
+                      }}
+                      className="px-5 py-2.5 bg-slate-950 text-white font-black text-[10px] uppercase tracking-widest rounded-xl hover:bg-black hover:scale-105 transition-all flex items-center gap-1.5 shadow-md cursor-pointer"
+                    >
+                      <Plus size={14} /> Tambahkan Aktivitas
+                    </button>
+                  </div>
+                </div>
+
+                {/* Active Activities List */}
+                <div className="bg-slate-50 p-6 md:p-8 rounded-[2rem] border border-slate-200 shadow-sm">
+                  <h5 className="m-0 font-black text-[11px] uppercase tracking-widest text-slate-900 mb-5 flex items-center gap-2">
+                    <Zap size={16} className="text-rose-600" /> DAFTAR AKTIVITAS AKTIF ({selectedActivityProject})
+                  </h5>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight -mt-3.5 mb-6 leading-normal">
+                    Daftar aktivitas aktif untuk project ini. Anda dapat menyunting atau menghapusnya langsung dari daftar ini:
+                  </p>
+
+                  <div className="space-y-3">
+                    {Object.entries(activities[selectedActivityProject] || {}).length === 0 ? (
+                      <div className="py-12 bg-white rounded-2xl border border-dashed border-slate-200 text-center text-slate-400 font-bold text-[10px] uppercase tracking-widest">
+                        Belum ada aktivitas terdaftar untuk project ini. Gunakan form di atas untuk menambahkan.
+                      </div>
+                    ) : (
+                      Object.entries(activities[selectedActivityProject] || {}).map(([code, act]: [string, any]) => (
+                        <div key={code} className="grid grid-cols-1 md:grid-cols-6 gap-4 items-center bg-white p-4.5 rounded-2xl border border-slate-100 shadow-sm transition-all hover:border-slate-200 group">
+                          {/* Code */}
+                          <div className="font-mono font-black text-rose-600 text-[10px] bg-rose-50 border border-rose-100 px-3 py-1.5 rounded-xl w-fit uppercase tracking-widest shadow-sm">
+                            {code}
+                          </div>
+                          
+                          {/* Label */}
+                          <div className="col-span-2">
+                            <input 
+                              placeholder="Label"
+                              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black uppercase tracking-tight outline-none focus:border-rose-500 transition-all focus:bg-white"
+                              value={act.label}
+                              onChange={(e) => {
+                                const updated = {
+                                  ...activities,
+                                  [selectedActivityProject]: {
+                                    ...(activities[selectedActivityProject] || {}),
+                                    [code]: { ...act, label: e.target.value }
+                                  }
+                                };
+                                setActivities(updated);
+                              }}
+                            />
+                          </div>
+
+                          {/* Duration */}
+                          <div>
+                            <select 
+                              className="w-full p-2.5 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-tight outline-none focus:border-rose-500 cursor-pointer"
+                              value={act.duration || 'custom'}
+                              onChange={(e) => {
+                                const updated = {
+                                  ...activities,
+                                  [selectedActivityProject]: {
+                                    ...(activities[selectedActivityProject] || {}),
+                                    [code]: { ...act, duration: e.target.value }
+                                  }
+                                };
+                                setActivities(updated);
+                              }}
+                            >
+                              <option value="1">15 mins</option>
+                              <option value="2">30 mins</option>
+                              <option value="4">1 hour</option>
+                              <option value="full">Full Day</option>
+                              <option value="custom">Custom</option>
+                            </select>
+                          </div>
+
+                          {/* Color Select & Delete */}
+                          <div className="flex gap-2 items-center col-span-2 justify-end">
+                            <div className="flex items-center gap-1 bg-slate-50 border border-slate-200 p-1.5 rounded-xl flex-wrap">
+                              {['bg-active-red', 'bg-rose-500', 'bg-amber-400', 'bg-emerald-500', 'bg-teal-500', 'bg-sky-500', 'bg-indigo-600', 'bg-violet-700', 'bg-slate-900', 'bg-black', 'bg-orange-500'].map(col => (
+                                <button
+                                  key={col}
+                                  onClick={() => {
+                                    const updated = {
+                                      ...activities,
+                                      [selectedActivityProject]: {
+                                        ...(activities[selectedActivityProject] || {}),
+                                        [code]: { ...act, color: col }
+                                      }
+                                    };
+                                    setActivities(updated);
+                                  }}
+                                  className={`w-3.5 h-3.5 rounded-md ${col} transition-all ${act.color === col ? 'ring-2 ring-rose-500 scale-110 shadow-sm' : 'opacity-60 hover:opacity-100'}`}
+                                />
+                              ))}
+                            </div>
+                            <button 
+                              onClick={() => {
+                                const newProjActs = { ...(activities[selectedActivityProject] || {}) };
+                                delete newProjActs[code];
+                                const updated = {
+                                  ...activities,
+                                  [selectedActivityProject]: newProjActs
+                                };
+                                setActivities(updated);
+                                showStatus("Aktivitas dihapus. Klik 'Save Activities' di atas untuk menyimpan.");
+                              }} 
+                              className="p-2 text-slate-300 hover:text-rose-600 transition-all hover:bg-rose-50 rounded-xl"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
               </div>
             )}
@@ -730,13 +1360,54 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                        <span className="text-[10px] font-black text-slate-400 tracking-widest">MEMUAT SHIFT DARI SUPABASE...</span>
                      </div>
                    ) : (
-                     <div className="space-y-3">
+                      <div className="space-y-3">
+                        {shifts.length > 0 && (
+                          <div className="hidden md:flex gap-3 px-4 text-[9px] font-black text-rose-500 uppercase tracking-widest leading-none mb-1">
+                            <span className="w-[100px] text-center">Code Shift</span>
+                            <span className="flex-1 text-center">Start Time</span>
+                            <span className="w-4 shrink-0"></span>
+                            <span className="flex-1 text-center">End Time</span>
+                            <span className="w-[70px] text-center">Prioritas</span>
+                            <span className="w-10 shrink-0"></span>
+                          </div>
+                        )}
+
                        {shifts.map((s, i) => (
                          <div key={i} className="flex gap-3 items-center bg-white p-4 rounded-2xl border border-slate-100 shadow-sm transition-all group">
-                           <input type="text" className="w-[80px] p-2.5 bg-slate-50 border border-slate-100 rounded-xl font-black font-mono text-[10px] text-rose-600 uppercase text-center" value={s.code} onChange={e => { const newS = [...shifts]; newS[i].code = e.target.value; setShifts(newS); }} />
+                           <select 
+                              className="w-[100px] p-2.5 bg-slate-50 border border-slate-100 rounded-xl font-black font-mono text-[10px] text-rose-600 uppercase text-center focus:outline-none focus:ring-1 focus:ring-rose-500" 
+                              value={s.code} 
+                              onChange={e => {
+                                const code = e.target.value;
+                                const newS = [...shifts];
+                                newS[i].code = code;
+                                if (SHIFT_DEFAULTS[code]) {
+                                  newS[i].s = SHIFT_DEFAULTS[code].s;
+                                  newS[i].e = SHIFT_DEFAULTS[code].e;
+                                  newS[i].w = SHIFT_DEFAULTS[code].w;
+                                }
+                                setShifts(newS);
+                              }}
+                            >
+                              <option value="">-- CODE --</option>
+                              {["P1", "P2", "P3", "P4", "P9", "S1", "S2", "S3", "S4", "S5", "S6", "S7", "M3", "M1"].map(code => (
+                                <option key={code} value={code}>{code}</option>
+                              ))}
+                              {s.code && !["P1", "P2", "P3", "P4", "P9", "S1", "S2", "S3", "S4", "S5", "S6", "S7", "M3", "M1"].includes(s.code) && (
+                                <option value={s.code}>{s.code}</option>
+                              )}
+                            </select>
                            <input type="text" placeholder="08:00" className="flex-1 p-2.5 bg-slate-50 border border-slate-100 rounded-xl font-black text-[10px] text-center font-mono" value={s.s} onChange={e => { const newS = [...shifts]; newS[i].s = e.target.value; setShifts(newS); }} />
                            <ArrowLeftRight size={12} className="text-slate-300 shrink-0" />
                            <input type="text" placeholder="17:00" className="flex-1 p-2.5 bg-slate-50 border border-slate-100 rounded-xl font-black text-[10px] text-center font-mono" value={s.e} onChange={e => { const newS = [...shifts]; newS[i].e = e.target.value; setShifts(newS); }} />
+                            <input 
+                              type="number" 
+                              placeholder="Sort" 
+                              title="Prioritas Sort (Angka lebih kecil tampil terlebih dahulu)"
+                              className="w-[70px] p-2.5 bg-slate-50 border border-slate-100 rounded-xl font-black text-[10px] text-center font-mono focus:outline-none focus:ring-1 focus:ring-rose-500" 
+                              value={s.w === undefined ? 1 : s.w} 
+                              onChange={e => { const newS = [...shifts]; newS[i].w = parseInt(e.target.value, 10) || 1; setShifts(newS); }} 
+                            />
                            <button className="p-2.5 text-slate-300 hover:text-rose-600 transition-colors" onClick={() => setShifts(shifts.filter((_, idx) => idx !== i))}>
                              <Trash2 size={16} />
                            </button>
@@ -784,75 +1455,486 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
               <div className="animate-in fade-in slide-in-from-top-4 duration-300 max-w-5xl mx-auto">
                 <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-200 shadow-sm mb-10">
                    <h4 className="m-0 font-black text-base uppercase tracking-widest text-slate-950 flex items-center gap-2.5"><Calendar size={18} className="text-rose-600" /> CALENDAR EXCEPTIONS</h4>
-                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight mt-1.5 px-7">National holidays and service blackouts</p>
+                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight mt-1.5 px-7">National holidays and service blackouts (Public Holidays & Cuti Bersama)</p>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-10">
-                  {holidays.map((h, i) => (
-                    <div key={i} className="flex gap-4 items-center bg-white p-5 rounded-2xl border border-slate-100 border-l-4 border-l-rose-600 shadow-sm transition-all group">
-                      <div className="flex-1">
-                        <div className="font-black text-slate-900 text-[11px] uppercase tracking-widest">{format(new Date(h.date), 'dd MMM yyyy')}</div>
-                        <div className="text-slate-400 text-[10px] font-bold uppercase tracking-tight opacity-70">{h.desc}</div>
+                  {holidays.map((h, i) => {
+                    const isCuti = h.type === 'cuti';
+                    return (
+                      <div key={i} className={`flex gap-4 items-center bg-white p-5 rounded-2xl border border-slate-200 border-l-4 ${isCuti ? 'border-l-amber-500' : 'border-l-rose-600'} shadow-sm transition-all group hover:shadow-md`}>
+                        <div className="flex-1">
+                          <div className="font-black text-slate-900 text-[11px] uppercase tracking-widest flex items-center gap-1.5 flex-wrap">
+                            <span>{format(new Date(h.date), 'dd MMM yyyy')}</span>
+                            <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${isCuti ? 'bg-amber-100 text-amber-800 border border-amber-200' : 'bg-rose-100 text-rose-800 border border-rose-200'}`}>
+                              {isCuti ? 'Cuti Bersama' : 'Public Holiday'}
+                            </span>
+                          </div>
+                          <div className="text-slate-400 text-[10px] font-bold uppercase tracking-tight opacity-70 mt-1">{h.desc}</div>
+                        </div>
+                        <button className="text-slate-300 hover:text-rose-600 transition-colors cursor-pointer" onClick={() => {
+                          const filtered = holidays.filter((_, idx) => idx !== i);
+                          setHolidays(filtered);
+                          const newHolidaysObj: Record<string, any> = {};
+                          filtered.forEach(item => {
+                            if (item.date && item.desc) {
+                              newHolidaysObj[item.date] = { desc: item.desc, type: item.type || 'public' };
+                            }
+                          });
+                          updateSettings({ holidays: newHolidaysObj });
+                          showStatus("Holiday deleted! 🗑️");
+                        }}>
+                          <Trash2 size={16} />
+                        </button>
                       </div>
-                      <button className="text-slate-300 hover:text-rose-600 transition-colors" onClick={() => setHolidays(holidays.filter((_, idx) => idx !== i))}>
-                        <Trash2 size={16} />
+                    );
+                  })}
+                </div>
+
+                <div className="mb-6 flex gap-3 max-w-[400px]">
+                  <button 
+                    type="button"
+                    onClick={() => setShowBulkHol(false)}
+                    className={`flex-1 py-3 px-4 font-black text-[9px] uppercase tracking-widest rounded-xl transition-all border text-center ${!showBulkHol ? 'bg-slate-900 border-slate-900 text-white shadow-md' : 'bg-white border-slate-200 text-slate-400 hover:text-slate-900'}`}
+                  >
+                    Tambah Satu-Satu
+                  </button>
+                  <button 
+                    type="button"
+                    onClick={() => setShowBulkHol(true)}
+                    className={`flex-1 py-3 px-4 font-black text-[9px] uppercase tracking-widest rounded-xl transition-all border text-center ${showBulkHol ? 'bg-slate-900 border-slate-900 text-white shadow-md' : 'bg-white border-slate-200 text-slate-400 hover:text-slate-900'}`}
+                  >
+                    Bulk Import
+                  </button>
+                </div>
+
+                {showBulkHol ? (
+                  <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-lg animate-in fade-in duration-300">
+                    <div className="mb-6">
+                      <label className="text-[9px] font-black text-rose-600 uppercase tracking-widest block mb-2 px-1">Bulk Import Hari Libur</label>
+                      <span className="text-[10px] font-bold text-slate-400 block mb-3 leading-normal px-1">
+                        Masukkan hari libur per baris dengan format: <code className="bg-slate-100 px-1.5 py-0.5 rounded text-rose-600 font-mono font-black">YYYY-MM-DD,Nama Hari Libur,Tipe</code> (Tipe opsional: <code className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-mono">public</code> atau <code className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-mono">cuti</code>. Contoh: <code className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-mono">2026-06-05,Cuti Bersama,cuti</code> atau <code className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-mono">2026-08-17,Hari Kemerdekaan RI,public</code>).
+                      </span>
+                      <textarea
+                        rows={6}
+                        className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-mono font-black outline-none focus:border-rose-500 placeholder:text-slate-300"
+                        placeholder="Contoh:&#10;2026-08-17,Hari Kemerdekaan RI,public&#10;2026-12-25,Hari Raya Natal,public&#10;2026-04-03,Cuti Bersama Lebaran,cuti"
+                        value={bulkHolText}
+                        onChange={e => setBulkHolText(e.target.value)}
+                      />
+                    </div>
+                    <div className="flex justify-end gap-3">
+                      <button 
+                        type="button"
+                        onClick={() => { setBulkHolText(''); setShowBulkHol(false); }}
+                        className="px-6 py-3 border border-slate-200 text-slate-400 hover:text-slate-900 font-black text-[9px] uppercase tracking-widest rounded-xl transition-all"
+                      >
+                        Batal
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={handleBulkImportHolidays}
+                        className="px-6 py-3 bg-rose-600 text-white font-black text-[9px] uppercase tracking-widest rounded-xl hover:bg-rose-700 shadow-lg shadow-rose-100 active:scale-95 transition-all flex items-center gap-2"
+                      >
+                        <Save size={14} /> Import & Simpan
                       </button>
                     </div>
-                  ))}
-                </div>
-                <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-lg">
-                  <div className="flex flex-col sm:flex-row gap-6 items-end">
-                    <div className="flex-1">
-                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-2 px-1">Effective Date</label>
-                      <input type="date" className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-black outline-none focus:border-rose-500" value={newHolDate} onChange={e => setNewHolDate(e.target.value)} />
-                    </div>
-                    <div className="flex-1">
-                      <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-2 px-1">Description</label>
-                      <input type="text" className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-black outline-none focus:border-rose-500 placeholder:text-slate-300" placeholder="e.g. Independence Day" value={newHolDesc} onChange={e => setNewHolDesc(e.target.value)} />
-                    </div>
-                    <button className="bg-rose-600 text-white font-black px-8 py-4 rounded-2xl hover:bg-rose-700 shadow-lg shadow-rose-100 active:scale-95 transition-all flex items-center justify-center" onClick={() => { if(newHolDate && newHolDesc) { setHolidays([...holidays, {date: newHolDate, desc: newHolDesc}]); setNewHolDate(''); setNewHolDesc(''); } }}>
-                      <Plus size={20} />
-                    </button>
                   </div>
-                </div>
+                ) : (
+                  <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-lg animate-in fade-in duration-300">
+                    <div className="flex flex-col md:flex-row gap-6 items-end">
+                      <div className="flex-1 w-full">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-2 px-1">Effective Date</label>
+                        <input type="date" className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-black outline-none focus:border-rose-500" value={newHolDate} onChange={e => setNewHolDate(e.target.value)} />
+                      </div>
+                      <div className="flex-1 w-full">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-2 px-1">Type</label>
+                        <select 
+                          className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-black outline-none focus:border-rose-500"
+                          value={newHolType}
+                          onChange={e => setNewHolType(e.target.value as 'public' | 'cuti')}
+                        >
+                          <option value="public">Public Holiday (Libur Nasional)</option>
+                          <option value="cuti">Cuti Bersama (Joint Leave)</option>
+                        </select>
+                      </div>
+                      <div className="flex-[1.5] w-full">
+                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-2 px-1">Description</label>
+                        <input type="text" className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-black outline-none focus:border-rose-500 placeholder:text-slate-300" placeholder="e.g. Independence Day / Cuti Lebaran" value={newHolDesc} onChange={e => setNewHolDesc(e.target.value)} />
+                      </div>
+                      <button type="button" className="bg-rose-600 text-white font-black px-8 py-4 rounded-2xl hover:bg-rose-700 shadow-lg shadow-rose-100 active:scale-95 transition-all flex items-center justify-center cursor-pointer h-[52px]" onClick={() => { 
+                        if(newHolDate && newHolDesc) { 
+                          const merged = [...holidays, {date: newHolDate, desc: newHolDesc, type: newHolType}];
+                          setHolidays(merged); 
+                          const newHolidaysObj: Record<string, any> = {};
+                          merged.forEach(item => {
+                            if (item.date && item.desc) {
+                              newHolidaysObj[item.date] = { desc: item.desc, type: item.type || 'public' };
+                            }
+                          });
+                          updateSettings({ holidays: newHolidaysObj });
+                          setNewHolDate(''); 
+                          setNewHolDesc(''); 
+                          setNewHolType('public');
+                          showStatus("Holiday Saved Successfully! ✅");
+                        } 
+                      }}>
+                        <Plus size={20} />
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
             {activeTab === 'autobreak' && (
               <div className="animate-in fade-in slide-in-from-top-4 duration-300 max-w-5xl mx-auto">
-                <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-200 shadow-sm mb-10">
-                   <h4 className="m-0 font-black text-base uppercase tracking-widest flex items-center gap-2.5 text-slate-950"><Utensils size={18} className="text-rose-600" /> BREAK RULESETS</h4>
-                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight mt-1.5 px-7">Automated meal and recovery allocations</p>
+                <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-200 shadow-sm mb-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                  <div>
+                    <h4 className="m-0 font-black text-base uppercase tracking-widest flex items-center gap-2.5 text-slate-950">
+                      <Utensils size={18} className="text-rose-600" /> BREAK RULESETS
+                    </h4>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight mt-1.5 px-7">
+                      Automated meal and recovery allocations
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Pilih Project:</span>
+                    <select
+                      className="p-2 px-3 bg-white border border-slate-200 rounded-xl text-[10px] font-black text-rose-600 uppercase tracking-widest cursor-pointer focus:ring-1 focus:ring-rose-500 outline-none"
+                      value={selectedBreakProject}
+                      onChange={(e) => setSelectedBreakProject(e.target.value)}
+                    >
+                      {PROJECTS.map((pj) => (
+                        <option key={pj} value={pj}>{pj}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 mb-10 text-nowrap">
-                  <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-4">Standard Release Duration (MIN)</label>
-                    <input type="number" className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-black outline-none focus:border-rose-500" value={fridayBreak?.normal || 90} onChange={e => setFridayBreak({...fridayBreak, normal: parseInt(e.target.value) || 0})} />
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 mb-10">
+                  <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm">
+                    <label className="text-[9px] font-black text-rose-600 uppercase tracking-widest block mb-4">Standard Break (MIN)</label>
+                    <input type="number" className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-black outline-none focus:border-rose-500" value={fridayBreak?.normal || 60} onChange={e => setFridayBreak({...fridayBreak, normal: parseInt(e.target.value) || 0})} />
                   </div>
-                  <div className="bg-white p-8 rounded-[2rem] border border-slate-200 shadow-sm">
-                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-4">Restricted Release Duration (MIN)</label>
-                    <input type="number" className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-black outline-none focus:border-rose-500" value={fridayBreak?.puasa || 60} onChange={e => setFridayBreak({...fridayBreak, puasa: parseInt(e.target.value) || 0})} />
+                  <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm">
+                    <label className="text-[9px] font-black text-rose-600 uppercase tracking-widest block mb-4">Short Break (MIN)</label>
+                    <input type="number" className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-black outline-none focus:border-rose-500" value={fridayBreak?.short || 15} onChange={e => setFridayBreak({...fridayBreak, short: parseInt(e.target.value) || 0})} />
                   </div>
+                  <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm">
+                    <label className="text-[9px] font-black text-rose-600 uppercase tracking-widest block mb-4">Special Friday Break (MIN)</label>
+                    <input type="number" className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-black outline-none focus:border-rose-500" value={fridayBreak?.friday || 90} onChange={e => setFridayBreak({...fridayBreak, friday: parseInt(e.target.value) || 0})} />
+                  </div>
+                </div>
+
+                <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-lg">
+                  <h5 className="m-0 font-black text-xs uppercase tracking-widest text-slate-950 mb-6 flex items-center gap-2.5">
+                    🕢 PENGATURAN JAM BREAK SHIFT PER PROJECT
+                  </h5>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight -mt-4 mb-6 leading-relaxed">
+                    Tentukan waktu istirahat (break times) otomatis untuk masing-masing Shift pada project <span className="text-rose-600 font-black">"{selectedBreakProject}"</span> ini. 
+                    Pisahkan dengan koma jika ada beberapa jam istirahat (Contoh: <code className="bg-slate-100 px-1 py-0.5 rounded text-rose-600 font-mono text-[9px] font-black">11:30, 15:00</code>)
+                  </p>
+
+                  {isLoadingBreakShifts ? (
+                    <div className="py-12 flex flex-col items-center justify-center gap-2">
+                      <RefreshCw size={24} className="animate-spin text-rose-600" />
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest animate-pulse">Memuat database shift...</span>
+                    </div>
+                  ) : breakShifts.length === 0 ? (
+                    <div className="py-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-center text-slate-400 font-bold text-[10px] uppercase tracking-widest">
+                      Belum ada Shift terdaftar untuk Project ini. Silakan daftarkan shift terlebih dahulu di tab Shift Rules.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {breakShifts.map((s) => (
+                        <div key={s.code} className="flex gap-4 items-center bg-slate-50 p-4 rounded-2xl border border-slate-100 hover:border-slate-200 transition-all group">
+                          <div className="w-[100px] shrink-0 font-black font-mono text-xs uppercase text-slate-900 border-r border-slate-200 py-1 flex flex-col">
+                            <span className="text-rose-600 font-black text-sm">{s.code}</span>
+                            <span className="text-[8px] font-bold text-slate-400 uppercase mt-0.5 tracking-tight font-sans">
+                              {s.s} - {s.e}
+                            </span>
+                          </div>
+                          <div className="flex-1">
+                            <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+                              Waktu Break (Jam Istirahat)
+                            </label>
+                            <input 
+                              type="text" 
+                              className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-black outline-none focus:border-rose-500 placeholder:text-slate-300 font-mono"
+                              placeholder="e.g. 11:30, 15:00"
+                              value={autoBreakStrings[s.code] || ''}
+                              onChange={e => {
+                                setAutoBreakStrings(prev => ({
+                                  ...prev,
+                                  [s.code]: e.target.value
+                                }));
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
 
             {activeTab === 'puasa' && (
-              <div className="animate-in fade-in slide-in-from-top-4 duration-300 max-w-5xl mx-auto">
-                <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-200 shadow-sm mb-10">
-                   <h4 className="m-0 font-black text-base uppercase tracking-widest flex items-center gap-2.5 text-slate-950"><Moon size={18} className="text-rose-600" /> FASTING CYCLES</h4>
-                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight mt-1.5 px-7">Active regional fasting period windows</p>
+              <div className="animate-in fade-in slide-in-from-top-4 duration-300 max-w-5xl mx-auto space-y-10">
+                {/* Header & Filter Project */}
+                <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                  <div>
+                    <h4 className="m-0 font-black text-base uppercase tracking-widest flex items-center gap-2.5 text-slate-950">
+                      <Moon size={18} className="text-rose-600 animate-pulse" /> FASTING CYCLES & AUTO-REDUCTION
+                    </h4>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight mt-1.5 px-7">
+                      Atur periode puasa, pemotongan otomatis jam kerja, dan pengurangan waktu istirahat
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Pilih Project:</span>
+                    <select
+                      className="p-2 px-3 bg-white border border-slate-200 rounded-xl text-[10px] font-black text-rose-600 uppercase tracking-widest cursor-pointer focus:ring-1 focus:ring-rose-500 outline-none"
+                      value={selectedFastingProject}
+                      onChange={(e) => setSelectedFastingProject(e.target.value)}
+                    >
+                      {PROJECTS.map((pj) => (
+                        <option key={pj} value={pj}>{pj}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-                  {puasa.map((p, i) => (
-                    <div key={i} className="flex gap-4 items-center bg-white p-5 rounded-2xl border border-slate-100 border-l-4 border-l-rose-600 shadow-sm group">
-                      <div className="font-black text-slate-900 flex-1 text-[11px] font-mono flex items-center gap-3">
-                        {p.start} <ArrowLeftRight size={14} className="text-slate-200"/> {p.end}
-                      </div>
-                      <button className="text-slate-300 hover:text-rose-600 transition-colors" onClick={() => setPuasa(puasa.filter((_, idx) => idx !== i))}>
-                        <Trash2 size={16} />
-                      </button>
+
+                {/* Periode Puasa (Fasting Calendar Periods) */}
+                <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-lg">
+                  <h5 className="m-0 font-black text-xs uppercase tracking-widest text-slate-950 mb-6 flex items-center gap-2">
+                    <Calendar size={16} className="text-rose-600" /> 📅 TAMBAH PERIODE PUASA / EVENT KHUSUS
+                  </h5>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight -mt-4 mb-6 leading-relaxed">
+                    Daftarkan rentang tanggal untuk mengaktifkan pemotongan jam kerja otomatis dan pengurangan istirahat di dashboard:
+                  </p>
+
+                  <div className="flex flex-col sm:flex-row gap-4 items-end mb-8 bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                    <div className="flex-1">
+                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">Tanggal Mulai</label>
+                      <input 
+                        type="date" 
+                        value={newPuasaStart} 
+                        onChange={e => setNewPuasaStart(e.target.value)} 
+                        className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-black outline-none focus:border-rose-500" 
+                      />
                     </div>
-                  ))}
+                    <div className="flex-1">
+                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">Tanggal Selesai</label>
+                      <input 
+                        type="date" 
+                        value={newPuasaEnd} 
+                        onChange={e => setNewPuasaEnd(e.target.value)} 
+                        className="w-full p-3 bg-white border border-slate-200 rounded-xl text-xs font-black outline-none focus:border-rose-500" 
+                      />
+                    </div>
+                    <button 
+                      onClick={() => {
+                        if (!newPuasaStart || !newPuasaEnd) {
+                          alert("Pilih tanggal mulai & selesai terlebih dahulu!");
+                          return;
+                        }
+                        if (new Date(newPuasaStart) > new Date(newPuasaEnd)) {
+                          alert("Tanggal mulai tidak boleh melebihi tanggal selesai!");
+                          return;
+                        }
+                        setPuasa([...puasa, { start: newPuasaStart, end: newPuasaEnd }]);
+                        setNewPuasaStart('');
+                        setNewPuasaEnd('');
+                        showStatus("Periode event ditambahkan! Silakan klik 'Commit Configuration' untuk menyimpan permanen. ✅");
+                      }}
+                      className="px-6 py-3.5 bg-rose-600 hover:bg-rose-700 text-white font-black text-[10px] uppercase tracking-widest rounded-xl transition-all flex items-center gap-2 shadow-md hover:scale-105"
+                    >
+                      <Plus size={15} /> Tambah Periode
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {puasa.length === 0 ? (
+                      <div className="sm:col-span-2 py-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-center text-slate-400 font-bold text-[10px] uppercase tracking-widest">
+                        Belum ada periode puasa terdaftar. Buat di atas untuk mengaktifkan pemotongan jam kerja otomatis.
+                      </div>
+                    ) : (
+                      puasa.map((p, i) => (
+                        <div key={i} className="flex gap-4 items-center bg-slate-50 p-4 px-5 rounded-2xl border border-slate-100 hover:border-slate-200 transition-all shadow-sm group">
+                          <Moon size={15} className="text-rose-600 animate-pulse shrink-0" />
+                          <div className="font-mono text-xs font-black text-slate-800 flex-1 flex items-center gap-2">
+                            <span>{p.start}</span>
+                            <span className="text-slate-300 font-sans">s/d</span>
+                            <span>{p.end}</span>
+                          </div>
+                          <button 
+                            className="text-slate-300 hover:text-rose-600 transition-colors p-1 rounded-lg hover:bg-slate-100" 
+                            onClick={() => {
+                              setPuasa(puasa.filter((_, idx) => idx !== i));
+                              showStatus("Periode puasa dihapus. Klik 'Commit Configuration' untuk menyimpan.");
+                            }}
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+
+                {/* Aturan Pemotongan Otomatis (Auto-Reduction Calculators) */}
+                <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-lg">
+                  <h5 className="m-0 font-black text-xs uppercase tracking-widest text-slate-950 mb-6 flex items-center gap-2">
+                    <Zap size={16} className="text-rose-600" /> ⚡ KALKULATOR PEMOTONGAN JAM KERJA & ISTIRAHAT OTOMATIS
+                  </h5>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight -mt-4 mb-6 leading-relaxed">
+                    Tentukan parameter di bawah untuk memotong jam kerja semua shift dan menyusutkan waktu istirahat secara instan:
+                  </p>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                    <div>
+                      <label className="text-[9px] font-black text-rose-600 uppercase tracking-widest block mb-2">Potong Jam Kerja (MENIT)</label>
+                      <input 
+                        type="number" 
+                        value={autoReduceMinutes} 
+                        onChange={e => setAutoReduceMinutes(Math.max(0, parseInt(e.target.value) || 0))}
+                        className="w-full p-4.5 bg-white border border-slate-200 rounded-xl text-xs font-black outline-none focus:border-rose-500 font-mono" 
+                        placeholder="contoh: 60"
+                      />
+                      <span className="text-[8px] text-slate-400 font-bold uppercase tracking-tight mt-1.5 block">Jam Kerja berkurang (ex: Selesai 1 jam lebih awal)</span>
+                    </div>
+
+                    <div>
+                      <label className="text-[9px] font-black text-rose-600 uppercase tracking-widest block mb-2">Durasi Istirahat Puasa (MENIT)</label>
+                      <input 
+                        type="number" 
+                        value={autoReduceBreakMinutes} 
+                        onChange={e => setAutoReduceBreakMinutes(Math.max(0, parseInt(e.target.value) || 0))}
+                        className="w-full p-4.5 bg-white border border-slate-200 rounded-xl text-xs font-black outline-none focus:border-rose-500 font-mono" 
+                        placeholder="contoh: 30"
+                      />
+                      <span className="text-[8px] text-slate-400 font-bold uppercase tracking-tight mt-1.5 block">Jam istirahat dipotong ke angka ini (ex: 30 menit)</span>
+                    </div>
+
+                    <button
+                      onClick={handleAutoApplyFastingRules}
+                      className="w-full p-4 bg-slate-950 text-white hover:bg-black font-black text-[10px] uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg hover:scale-[1.02] border border-slate-800"
+                    >
+                      <Zap size={14} className="text-yellow-400 fill-yellow-400" /> Terapkan Otomatis
+                    </button>
+                  </div>
+                </div>
+
+                {/* Pengaturan Jam Kerja & Istirahat Per Shift */}
+                <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-lg">
+                  <h5 className="m-0 font-black text-xs uppercase tracking-widest text-slate-950 mb-4 flex items-center gap-2">
+                    <Clock size={16} className="text-rose-600 animate-pulse" /> 🕜 DETAIL JAM KERJA & ISTIRAHAT SHIFT PUASA (PROJECT: {selectedFastingProject})
+                  </h5>
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight mb-8 leading-relaxed">
+                    Daftar jam kerja khusus & durasi istirahat (dalam menit) untuk masing-masing shift selama periode puasa aktif. Anda bisa menyunting manual atau memakai tombol re-kalkulasi di atas.
+                  </p>
+
+                  {isLoadingFastingShifts ? (
+                    <div className="py-12 flex flex-col items-center justify-center gap-2">
+                      <RefreshCw size={24} className="animate-spin text-rose-600" />
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest animate-pulse">Memuat database shift...</span>
+                    </div>
+                  ) : fastingProjectShifts.length === 0 ? (
+                    <div className="py-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-center text-slate-400 font-bold text-[10px] uppercase tracking-widest">
+                      Belum ada Shift terdaftar untuk Project ini. Silakan daftarkan shift terlebih dahulu di tab Shift Rules.
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-4">
+                      {fastingProjectShifts.map((s) => {
+                        const fastS = puasaShifts[s.code]?.s || s.s;
+                        const fastE = puasaShifts[s.code]?.e || s.e;
+                        const fastB = puasaShifts[s.code]?.b || 60;
+                        
+                        return (
+                          <div key={s.code} className="flex flex-col lg:flex-row gap-4 items-start lg:items-center bg-slate-50 p-5 rounded-2xl border border-slate-100 hover:border-slate-200 transition-all hover:shadow-sm">
+                            {/* Shift Info */}
+                            <div className="w-[140px] shrink-0 font-black font-mono uppercase text-slate-900 border-b lg:border-b-0 lg:border-r border-slate-200 pb-3 lg:pb-0 lg:pr-4 flex flex-col justify-center">
+                              <span className="text-rose-600 font-black text-sm">{s.code}</span>
+                              <span className="text-[8.5px] font-bold text-slate-400 uppercase mt-1 tracking-wider font-sans whitespace-nowrap">
+                                Normal: {s.s} - {s.e}
+                              </span>
+                            </div>
+
+                            {/* Shift Adjustments */}
+                            <div className="flex-1 w-full grid grid-cols-1 sm:grid-cols-3 gap-4">
+                              <div>
+                                <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+                                  Fasting Shift Start
+                                </label>
+                                <input 
+                                  type="text" 
+                                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-black outline-none focus:border-rose-500 font-mono text-center"
+                                  value={fastS}
+                                  placeholder="07:00"
+                                  onChange={e => {
+                                    setPuasaShifts(prev => ({
+                                      ...prev,
+                                      [s.code]: {
+                                        s: e.target.value,
+                                        e: prev[s.code]?.e || s.e,
+                                        b: prev[s.code]?.b || 60
+                                      }
+                                    }));
+                                  }}
+                                />
+                              </div>
+
+                              <div>
+                                <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+                                  Fasting Shift End (Cut Jam)
+                                </label>
+                                <input 
+                                  type="text" 
+                                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-black outline-none focus:border-rose-500 font-mono text-center"
+                                  value={fastE}
+                                  placeholder="15:00"
+                                  onChange={e => {
+                                    setPuasaShifts(prev => ({
+                                      ...prev,
+                                      [s.code]: {
+                                        s: prev[s.code]?.s || s.s,
+                                        e: e.target.value,
+                                        b: prev[s.code]?.b || 60
+                                      }
+                                    }));
+                                  }}
+                                />
+                              </div>
+
+                              <div>
+                                <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-1">
+                                  Istirahat Puasa (MENIT)
+                                  <span className="text-rose-600 ml-1">(-Istirahat)</span>
+                                </label>
+                                <input 
+                                  type="number" 
+                                  className="w-full px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-black outline-none focus:border-rose-500 font-mono text-center text-rose-600"
+                                  value={fastB}
+                                  placeholder="30"
+                                  onChange={e => {
+                                    setPuasaShifts(prev => ({
+                                      ...prev,
+                                      [s.code]: {
+                                        s: prev[s.code]?.s || s.s,
+                                        e: prev[s.code]?.e || s.e,
+                                        b: parseInt(e.target.value) || 0
+                                      }
+                                    }));
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -937,6 +2019,59 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                 <p className="text-[9px] text-slate-400 font-bold leading-relaxed uppercase tracking-tight">
                   System ensures connectivity via Supabase-JS SDK. Anon key allows public access based on RLS (Row Level Security) policies defined in the portal.
                 </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Automated PostgreSQL Table Creator via Backend Server Script */}
+          <div className="mt-12 p-8 bg-indigo-50/50 border border-indigo-100 rounded-[2.5rem] relative overflow-hidden space-y-6">
+            <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/5 rounded-full blur-3xl pointer-events-none" />
+            
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative z-10">
+              <div>
+                <h5 className="text-xs font-black uppercase tracking-wider text-indigo-950 flex items-center gap-2">
+                  <Database size={18} className="text-indigo-600 animate-pulse" />
+                  INSTALASI TABEL OTOMATIS (ONE-CLICK DATABASE INITIALIZER)
+                </h5>
+                <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">
+                  Metode aman untuk mengonstruksikan seluruh skema tabel workforce secara instan di Supabase
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-3xl border border-indigo-100/60 shadow-sm space-y-5 relative z-10">
+              <div>
+                <label className="text-[9px] font-black text-indigo-950 uppercase tracking-widest block mb-1.5 px-1">
+                  PostgreSQL Connection URI (DATABASE_URL)
+                </label>
+                <input 
+                  type="password" 
+                  placeholder="postgresql://postgres.[ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres"
+                  value={postgresConnectionString}
+                  onChange={(e) => setPostgresConnectionString(e.target.value)}
+                  className="w-full p-4.5 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 text-xs font-black outline-none focus:border-indigo-500 transition-all font-mono placeholder:text-slate-300"
+                />
+                <p className="text-[8.5px] text-slate-400 font-bold leading-normal mt-2.5 px-1 uppercase tracking-tight">
+                  TIPS: Anda dapat menyalin URI ini dari dashboard Supabase Anda di <span className="text-indigo-600 font-black">Project Settings &gt; Database &gt; Connection string &gt; URI</span> (Gunakan mode Session Pooler atau Transaction Pooler dan ganti password Anda).
+                </p>
+              </div>
+
+              {initResult.status !== 'idle' && (
+                <div className={`p-4.5 rounded-2xl border text-[10px] font-black uppercase tracking-wider leading-relaxed ${initResult.status === 'success' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700' : 'bg-rose-500/10 border-rose-500/30 text-rose-600'}`}>
+                  {initResult.status === 'success' ? 'Selesai: ' : 'Kesalahan: '}
+                  {initResult.message}
+                </div>
+              )}
+
+              <div className="flex justify-end pt-2">
+                <button
+                  disabled={isInitializingTables}
+                  onClick={handleInitializeTables}
+                  className="w-full sm:w-auto px-6 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2.5 transition-all bg-indigo-600 text-white hover:bg-indigo-700 active:scale-95 disabled:opacity-50 shadow-md shadow-indigo-100 cursor-pointer text-center"
+                >
+                  {isInitializingTables ? <RefreshCw size={14} className="animate-spin" /> : <Database size={14} />}
+                  {isInitializingTables ? 'Memproses Migrasi...' : 'Jalankan Inisialisasi Tabel Supabase'}
+                </button>
               </div>
             </div>
           </div>
@@ -1030,7 +2165,20 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                     `CREATE POLICY "Allow public read master_shifts" ON public.master_shifts FOR SELECT USING (true);\n` +
                     `CREATE POLICY "Allow public insert master_shifts" ON public.master_shifts FOR INSERT WITH CHECK (true);\n` +
                     `CREATE POLICY "Allow public update master_shifts" ON public.master_shifts FOR UPDATE USING (true) WITH CHECK (true);\n` +
-                    `CREATE POLICY "Allow public delete master_shifts" ON public.master_shifts FOR DELETE USING (true);`;
+                    `CREATE POLICY "Allow public delete master_shifts" ON public.master_shifts FOR DELETE USING (true);\n\n` +
+                    `-- 13. Buat Tabel 'portal_settings' (Penyimpanan Konfigurasi Workforce di Supabase)\n` +
+                    `CREATE TABLE IF NOT EXISTS public.portal_settings (\n` +
+                    `    id VARCHAR(255) PRIMARY KEY,\n` +
+                    `    settings JSONB NOT NULL,\n` +
+                    `    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL\n` +
+                    `);\n\n` +
+                    `-- 14. Aktifkan RLS untuk portal_settings\n` +
+                    `ALTER TABLE public.portal_settings ENABLE ROW LEVEL SECURITY;\n\n` +
+                    `-- 15. Kebijakan RLS portal_settings\n` +
+                    `CREATE POLICY "Allow public read portal_settings" ON public.portal_settings FOR SELECT USING (true);\n` +
+                    `CREATE POLICY "Allow public insert portal_settings" ON public.portal_settings FOR INSERT WITH CHECK (true);\n` +
+                    `CREATE POLICY "Allow public update portal_settings" ON public.portal_settings FOR UPDATE USING (true) WITH CHECK (true);\n` +
+                    `CREATE POLICY "Allow public delete portal_settings" ON public.portal_settings FOR DELETE USING (true);`;
                   navigator.clipboard.writeText(sqlText);
                   alert("SQL Schema berhasil disalin ke clipboard! 👍");
                 }}
@@ -1130,7 +2278,23 @@ ALTER TABLE public.master_shifts ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow public read master_shifts" ON public.master_shifts FOR SELECT USING (true);
 CREATE POLICY "Allow public insert master_shifts" ON public.master_shifts FOR INSERT WITH CHECK (true);
 CREATE POLICY "Allow public update master_shifts" ON public.master_shifts FOR UPDATE USING (true) WITH CHECK (true);
-CREATE POLICY "Allow public delete master_shifts" ON public.master_shifts FOR DELETE USING (true);`}
+CREATE POLICY "Allow public delete master_shifts" ON public.master_shifts FOR DELETE USING (true);
+
+-- 13. Buat Tabel 'portal_settings'
+CREATE TABLE IF NOT EXISTS public.portal_settings (
+    id VARCHAR(255) PRIMARY KEY,
+    settings JSONB NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+-- 14. Aktifkan RLS untuk portal_settings
+ALTER TABLE public.portal_settings ENABLE ROW LEVEL SECURITY;
+
+-- 15. Kebijakan Keamanan (RLS Policies)
+CREATE POLICY "Allow public read portal_settings" ON public.portal_settings FOR SELECT USING (true);
+CREATE POLICY "Allow public insert portal_settings" ON public.portal_settings FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow public update portal_settings" ON public.portal_settings FOR UPDATE USING (true) WITH CHECK (true);
+CREATE POLICY "Allow public delete portal_settings" ON public.portal_settings FOR DELETE USING (true);`}
               </pre>
             </div>
 

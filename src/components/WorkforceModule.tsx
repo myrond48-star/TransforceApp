@@ -27,7 +27,8 @@ import {
   UserCheck,
   UserCircle,
   LayoutDashboard,
-  Info
+  Info,
+  Trash2
 } from "lucide-react";
 import { 
   XAxis, 
@@ -42,7 +43,7 @@ import {
   ComposedChart,
   ReferenceLine
 } from "recharts";
-import { fetchEmployees, createEmployee, deleteEmployee, fetchWorkforce, createWorkforceRecord, deleteWorkforceRecord, fetchIntervalRequirements, upsertIntervalRequirements, fetchUniqueProjects, fetchRosterSchedule, upsertRosterSchedule } from "../lib/api";
+import { fetchEmployees, createEmployee, deleteEmployee, fetchWorkforce, createWorkforceRecord, deleteWorkforceRecord, deleteWorkforceRecords, fetchIntervalRequirements, upsertIntervalRequirements, fetchUniqueProjects, fetchRosterSchedule, upsertRosterSchedule } from "../lib/api";
 import { useAppStore } from "../lib/store";
 
 interface WorkforceModuleProps {
@@ -52,9 +53,9 @@ interface WorkforceModuleProps {
 // --- Mock Data & Constants ---
 
 const SHIFTS = {
-  "S1": { label: "Morning", start: "07:00", end: "16:00", color: "bg-blue-500" },
-  "S2": { label: "Evening", start: "15:00", end: "00:00", color: "bg-indigo-500" },
-  "H": { label: "Day", start: "08:00", end: "17:00", color: "bg-emerald-500" },
+  "S1": { label: "Morning", start: "07:00", end: "16:00", color: "bg-blue-500", weight: 1 },
+  "S2": { label: "Evening", start: "15:00", end: "00:00", color: "bg-indigo-500", weight: 2 },
+  "H": { label: "Day", start: "08:00", end: "17:00", color: "bg-emerald-500", weight: 3 },
 };
 
 const SITES = ["Jakarta", "Jogja", "Semarang"];
@@ -112,7 +113,7 @@ const matchUnit = (agentUnit: string | undefined, selectedUnit: string) => {
 
 const matchProject = (agentProj: string | undefined, selectedProject: string) => {
   if (!selectedProject || selectedProject === "all") return true;
-  const aProj = (agentProj || "Project Alpha").trim().toLowerCase();
+  const aProj = (agentProj || "").trim().toLowerCase();
   const pSel = selectedProject.trim().toLowerCase();
   return aProj === pSel;
 };
@@ -132,42 +133,7 @@ const getProjectOffset = (projectName: string | undefined, hour: number) => {
   return Math.round(baseOffset + wave);
 };
 
-const mockAgents = [
-  { id: "WF001", name: "Alexander Grant", shift: "S1", team: "Support A", site: "Jakarta", unit: "Unit A", project: "Project Alpha", activities: { 40: "LB", 41: "LB", 42: "LB", 43: "LB", 56: "SB" } },
-  { id: "WF002", name: "Sarah Connor", shift: "H", team: "Support B", site: "Jogja", unit: "Unit B", project: "Customer Care", activities: { 48: "MT", 49: "MT", 56: "LB", 57: "LB", 58: "LB", 59: "LB" } },
-  { id: "WF003", name: "John Wick", shift: "S2", team: "High Priority", site: "Semarang", unit: "Unit C", project: "Technical Support", activities: { 80: "LB", 81: "LB", 82: "LB", 83: "LB" } },
-  { id: "WF004", name: "Ellen Ripley", shift: "S1", team: "Support A", site: "Jakarta", unit: "Unit A", project: "Project Beta", activities: { 48: "TR", 49: "TR", 50: "TR", 51: "TR" } },
-  { id: "WF005", name: "Arthur Dent", shift: "H", team: "Support B", site: "Jogja", unit: "Unit B", project: "VIP Concierge", activities: { 60: "LB", 61: "LB", 62: "LB", 63: "LB" } },
-  ...Array.from({ length: 35 }).map((_, i) => {
-    const shiftOpts = ["S1", "S2", "H"];
-    const teamOpts = ["Support A", "Support B", "High Priority", "Technical"];
-    const shift = shiftOpts[Math.floor(Math.random() * shiftOpts.length)];
-    const team = teamOpts[Math.floor(Math.random() * teamOpts.length)];
-    const site = SITES[Math.floor(Math.random() * SITES.length)];
-    const unit = UNITS[Math.floor(Math.random() * UNITS.length)];
-    const project = DEFAULT_PROJECTS[Math.floor(Math.random() * DEFAULT_PROJECTS.length)];
-    const id = "WF" + String(i + 6).padStart(3, '0');
-    const firsts = ["James", "Maria", "Michael", "Linda", "Robert", "David", "Jessica", "Daniel", "Emily", "Jane", "Alice", "Bob", "Charlie", "Dave", "Eve", "Frank"];
-    const lasts = ["Smith", "Johnson", "Williams", "Jones", "Brown", "Davis", "Miller", "Wilson", "Moore", "Taylor", "Anderson", "Thomas", "Jackson", "White", "Harris", "Martin"];
-    const name = firsts[Math.floor(Math.random() * firsts.length)] + " " + lasts[Math.floor(Math.random() * lasts.length)];
-    let breakStart = shift === "S1" ? 40 + Math.floor(Math.random() * 16) : shift === "H" ? 56 + Math.floor(Math.random() * 16) : 80 + Math.floor(Math.random() * 12);
-    return {
-      id,
-      name,
-      shift,
-      team,
-      site,
-      unit,
-      project,
-      activities: {
-        [(breakStart) % 96]: "LB",
-        [(breakStart + 1) % 96]: "LB",
-        [(breakStart + 2) % 96]: "LB",
-        [(breakStart + 3) % 96]: "LB",
-      }
-    };
-  })
-];
+const mockAgents: any[] = [];
 
 const reqData = Array.from({ length: 96 }).map((_, i) => {
   const req = 15 + Math.floor(Math.sin(i / 10) * 10) + Math.floor(Math.random() * 5);
@@ -198,6 +164,268 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
   const [selectedSite, setSelectedSite] = useState("all");
   const [selectedUnit, setSelectedUnit] = useState("all");
   const [selectedProject, setSelectedProject] = useState("all");
+  const settings = useAppStore(state => state.settings);
+
+  const getActivityDef = (code: string, agentProj?: string) => {
+    const projKey = (selectedProject && selectedProject !== "all") 
+      ? selectedProject 
+      : (agentProj || "Project Alpha");
+    
+    const projActivities = settings.activities?.[projKey];
+    if (projActivities && projActivities[code]) {
+      return projActivities[code];
+    }
+    
+    if (settings.activities) {
+      for (const proj of Object.keys(settings.activities)) {
+        if (settings.activities[proj]?.[code]) {
+          return settings.activities[proj][code];
+        }
+      }
+    }
+    
+    return ACTIVITY_TYPES[code as keyof typeof ACTIVITY_TYPES] || { label: code, color: "bg-slate-500" };
+  };
+
+  // Persistent Custom Agent Activities/Breaks Store
+  const [agentActivities, setAgentActivities] = useState<Record<string, Record<string, Record<string, Record<number, string>>>>>(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("workforce_custom_breaks");
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (_) {
+          return {};
+        }
+      }
+    }
+    return {};
+  });
+
+  // Save agentActivities to localStorage when it changes
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("workforce_custom_breaks", JSON.stringify(agentActivities));
+    }
+  }, [agentActivities]);
+
+  const handleClearBreaks = (agentId: string) => {
+    setAgentActivities(prev => {
+      const nextProj = { ...prev[selectedProject] };
+      const nextDate = { ...nextProj[selectedDate] };
+      nextDate[agentId] = {}; // clear activities
+      nextProj[selectedDate] = nextDate;
+      
+      showNotification(`Break untuk agent berhasil dihapus! 🗑️`, "success");
+      return {
+        ...prev,
+        [selectedProject]: nextProj
+      };
+    });
+  };
+
+  const handleToggleCellBreak = (agentId: string, slotIdx: number, currentActivity: string | null) => {
+    setAgentActivities(prev => {
+      const nextProj = { ...prev[selectedProject] };
+      const nextDate = { ...nextProj[selectedDate] };
+      const agentActs = { ...(nextDate[agentId] || {}) };
+      
+      if (currentActivity) {
+        delete agentActs[slotIdx];
+      } else {
+        agentActs[slotIdx] = "LB"; // Toggle to Lunch Break
+      }
+      
+      nextDate[agentId] = agentActs;
+      nextProj[selectedDate] = nextDate;
+      
+      return {
+        ...prev,
+        [selectedProject]: nextProj
+      };
+    });
+  };
+
+  const handleAutoBreak = () => {
+    // 1. Get filtered agents of the currently displayed list
+    const filteredAgents = combinedAgents
+      .filter(a => a.name.toLowerCase().includes(searchQuery.toLowerCase()))
+      .filter(a => selectedTeam === "all" || a.team === selectedTeam)
+      .filter(a => matchSite(a.site, selectedSite))
+      .filter(a => matchUnit(a.unit, selectedUnit))
+      .filter(a => matchProject(a.project, selectedProject));
+
+    if (filteredAgents.length === 0) {
+      showNotification("Tidak ada agen yang sesuai filter untuk dijadwalkan break.", "error");
+      return;
+    }
+
+    // Days in current roster schedule to check for overlap/same hours
+    const days = getDaysArray(rosterStartDate, rosterEndDate);
+
+    // Helper to get agent's shift configuration for the selected date
+    const getAgentShiftForDateLocal = (agent: any) => {
+      const rosterEntry = generatedRoster.find(r => r.empId === agent.id);
+      const shiftCode = rosterEntry ? rosterEntry.roster[selectedDate] : agent.shift;
+      if (!shiftCode || shiftCode === "OFF") {
+        return null;
+      }
+      return {
+        code: shiftCode,
+        shift: resolvedShifts[shiftCode] || Object.values(resolvedShifts)[0]
+      };
+    };
+
+    // Compute base actual coverage for each interval idx (0 - 95)
+    // representing how many agents are working without any breaks.
+    const baseCoverage = Array.from({ length: 96 }, () => 0);
+    filteredAgents.forEach(agent => {
+      const shiftInfo = getAgentShiftForDateLocal(agent);
+      if (shiftInfo) {
+        const s = shiftInfo.shift;
+        const startIdx = timeToIndex(s.start);
+        let endIdx = timeToIndex(s.end);
+        if (endIdx <= startIdx) endIdx = 96;
+        for (let i = startIdx; i < endIdx; i++) {
+          baseCoverage[i]++;
+        }
+      }
+    });
+
+    // Compute original required staffing curve for matching dynamicReqData
+    const totalAgentsInFilter = filteredAgents.length;
+    const requiredCount = Array.from({ length: 96 }, (_, i) => {
+      if (totalAgentsInFilter > 0) {
+        const multiplier = 0.75 + Math.sin(i / 12) * 0.15;
+        return Math.max(1, Math.round(totalAgentsInFilter * multiplier));
+      }
+      return 0;
+    });
+
+    // Running coverage tracks how many working agents currently exist
+    const currentCoverage = [...baseCoverage];
+
+    // Map to hold newly assigned breaks on selectedDate
+    const newAssignedDateBreaks: Record<string, Record<number, string>> = {};
+
+    // Sort agents or process them. Let's process each agent in order.
+    filteredAgents.forEach(agent => {
+      const shiftInfo = getAgentShiftForDateLocal(agent);
+      if (!shiftInfo) {
+        // Agent is OFF, so no breaks needed!
+        newAssignedDateBreaks[agent.id] = {};
+        return;
+      }
+
+      const { code: shiftCode, shift: s } = shiftInfo;
+      const shiftStartIdx = timeToIndex(s.start);
+      let shiftEndIdx = timeToIndex(s.end);
+      if (shiftEndIdx <= shiftStartIdx) shiftEndIdx = 96;
+
+      // Follow "mengikuti settingan pada auto break"
+      // If custom break options are configured, we retrieve them
+      const customOptions = settings.autoBreak?.[shiftCode] || [];
+      let candidates: number[] = [];
+      if (customOptions.length > 0) {
+        candidates = customOptions
+          .map((t: string) => timeToIndex(t))
+          .filter((idx: number) => idx >= shiftStartIdx && idx < shiftEndIdx);
+      }
+
+      // Fallback candidate break start bounds (middle 50% of the shift) if no options specified
+      if (candidates.length === 0) {
+        const totalSlots = shiftEndIdx - shiftStartIdx;
+        const startMid = shiftStartIdx + Math.floor(totalSlots * 0.3);
+        const endMid = shiftStartIdx + Math.floor(totalSlots * 0.7);
+        for (let i = startMid; i <= endMid - 4; i += 2) {
+          candidates.push(i);
+        }
+        if (candidates.length === 0) {
+          candidates.push(shiftStartIdx + Math.floor(totalSlots / 2));
+        }
+      }
+
+      // Check this agent's break times on OTHER days in current roster period
+      const otherDaysBreakStarts: number[] = [];
+      days.forEach(day => {
+        if (day !== selectedDate) {
+          const dayActs = agentActivities[selectedProject]?.[day]?.[agent.id] || {};
+          const keys = Object.keys(dayActs).map(Number).sort((a, b) => a - b);
+          if (keys.length > 0) {
+            otherDaysBreakStarts.push(keys[0]); // record their earliest break start slot
+          }
+        }
+      });
+
+      // Find the best slot based on "coverage gap terbesar hindari gap minus" and other day break penalties
+      let bestCandidate = candidates[0];
+      let bestScore = -Infinity;
+
+      candidates.forEach(c => {
+        let totalGapSum = 0;
+        let penalty = 0;
+
+        // Check each of the 4 slots of this 1-hour break (LB)
+        for (let offset = 0; offset < 4; offset++) {
+          const sIdx = c + offset;
+          if (sIdx >= 96) continue;
+
+          const currentActual = currentCoverage[sIdx];
+          const required = requiredCount[sIdx];
+          const currentGap = currentActual - required;
+
+          // If allocating this break (taking 1 agent away) drops coverage below requirement (gap minus), penalize heavily!
+          if (currentActual - 1 < required) {
+            penalty += 10000; // severe penalty to prevent negative gap
+          }
+
+          totalGapSum += currentGap;
+        }
+
+        // Hindari break di jam yang sama untuk agent lain / agent yang sama di hari lain
+        otherDaysBreakStarts.forEach(prevStart => {
+          if (c === prevStart) {
+            penalty += 50000; // exact same slot penalty
+          } else if (Math.abs(c - prevStart) < 4) {
+            penalty += 15000; // scheduled in the same hour block penalty
+          }
+        });
+
+        // Final candidate score. Higher is better (higher gap, lower penalty)
+        const score = totalGapSum - penalty;
+        if (score > bestScore) {
+          bestScore = score;
+          bestCandidate = c;
+        }
+      });
+
+      // Assign the 4 slots of break (LB) to the chose best candidate
+      const agentActs: Record<number, string> = {};
+      for (let offset = 0; offset < 4; offset++) {
+        const slot = bestCandidate + offset;
+        if (slot < 96) {
+          agentActs[slot] = "LB";
+          // Subtract from current available coverage so next agents' evaluations take this break into account!
+          currentCoverage[slot]--;
+        }
+      }
+
+      newAssignedDateBreaks[agent.id] = agentActs;
+    });
+
+    // Save newly calculated custom activities in state
+    setAgentActivities(prev => {
+      const nextProj = { ...prev[selectedProject] };
+      const nextDate = { ...nextProj[selectedDate], ...newAssignedDateBreaks };
+      nextProj[selectedDate] = nextDate;
+      return {
+        ...prev,
+        [selectedProject]: nextProj
+      };
+    });
+
+    showNotification("Auto Break berhasil diproses untuk semua agen aktif! ☕", "success");
+  };
   const [dbShifts, setDbShifts] = useState<Record<string, { label: string; start: string; end: string; color: string }>>({});
 
   const resolvedShifts: Record<string, { label: string; start: string; end: string; color: string }> = {
@@ -216,7 +444,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
         }
         const { data, error } = await query;
         if (data && data.length > 0) {
-          const shiftMap: Record<string, { label: string; start: string; end: string; color: string }> = {};
+          const shiftMap: Record<string, { label: string; start: string; end: string; color: string; weight?: number }> = {};
           const colors = ["bg-blue-500", "bg-indigo-500", "bg-emerald-500", "bg-amber-500", "bg-purple-500", "bg-rose-500", "bg-teal-500"];
           
           data.forEach((s: any, idx: number) => {
@@ -225,7 +453,8 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
               label: s.code,
               start: s.start_time,
               end: s.end_time,
-              color: colorClass
+              color: colorClass,
+              weight: s.weight || 1
             };
           });
           setDbShifts(shiftMap);
@@ -267,6 +496,13 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
   const [dbError, setDbError] = useState<string | null>(null);
   const [usingFallback, setUsingFallback] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | number | null>(null);
+  const [selectedDbEmployeeIds, setSelectedDbEmployeeIds] = useState<(string | number)[]>([]);
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
+
+  React.useEffect(() => {
+    setSelectedDbEmployeeIds([]);
+  }, [selectedSite, selectedUnit, selectedProject]);
+
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
 
   const showNotification = (message: string, type: 'success' | 'error' | 'info' = 'success') => {
@@ -321,16 +557,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
     return daysArray.filter(d => !["Sat", "Sun"].includes(format(parseISO(d), "EEE"))).length;
   };
 
-  const SEED_WORKFORCE = [
-    { id: "wf_1", nip: "2221669", name: "Yoga Fachrul Tristiawan", skill: "English", channel: "Voice", gender: "Male", religion: "Islam", project: "Project Alpha", unit: "Unit A", site: "Jakarta" },
-    { id: "wf_2", nip: "2221670", name: "Helmi Khairunnisa", skill: "Mandarin", channel: "Non-Voice", gender: "Female", religion: "Islam", project: "Project Beta", unit: "Unit B", site: "Jogja" },
-    { id: "wf_3", nip: "2221671", name: "Elina Isninda Riyani", skill: "Japanese", channel: "Chat", gender: "Female", religion: "Kristen Protestan", project: "Customer Care", unit: "Unit C", site: "Semarang" },
-    { id: "wf_4", nip: "2221672", name: "Adi Saputra", skill: "Malay", channel: "Email", gender: "Male", religion: "Islam", project: "Technical Support", unit: "Unit A", site: "Jakarta" },
-    { id: "wf_5", nip: "2221673", name: "Christian Wijaya", skill: "English", channel: "Digital", gender: "Male", religion: "Katolik", project: "VIP Concierge", unit: "Unit B", site: "Jogja" },
-    { id: "wf_6", nip: "2221674", name: "Dewi Lestari", skill: "Bahasa Indonesia", channel: "Voice", gender: "Female", religion: "Hindu", project: "Project Alpha", unit: "Unit C", site: "Semarang" },
-    { id: "wf_7", nip: "2221675", name: "Farhan Ramadhan", skill: "Technical Support", channel: "Non-Voice", gender: "Male", religion: "Islam", project: "Project Beta", unit: "Unit A", site: "Jakarta" },
-    { id: "wf_8", nip: "2221676", name: "Grace Siregar", skill: "English", channel: "Chat", gender: "Female", religion: "Kristen Protestan", project: "Customer Care", unit: "Unit B", site: "Jogja" }
-  ];
+  const SEED_WORKFORCE: any[] = [];
 
   const loadDbEmployees = async () => {
     setDbLoading(true);
@@ -429,11 +656,25 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
     try {
       const dbData = await fetchRosterSchedule(start, end, project);
       if (dbData && dbData.length > 0) {
-        // Group by emp_id
+        // Group by emp_id in a case-insensitive and trimmed manner
         const rosterMap: Record<string, Record<string, string>> = {};
         dbData.forEach((row: any) => {
-          if (!rosterMap[row.emp_id]) rosterMap[row.emp_id] = {};
-          rosterMap[row.emp_id][row.date] = row.shift_code;
+          if (!row.emp_id) return;
+          const empIdStr = String(row.emp_id).trim();
+          if (!rosterMap[empIdStr]) rosterMap[empIdStr] = {};
+          
+          let dateStr = "";
+          if (row.date) {
+            // Support Date object, string ISO timestamp, or date format
+            if (row.date instanceof Date) {
+              dateStr = format(row.date, "yyyy-MM-dd");
+            } else {
+              dateStr = String(row.date).split("T")[0].split(" ")[0].trim();
+            }
+          }
+          if (dateStr) {
+            rosterMap[empIdStr][dateStr] = row.shift_code;
+          }
         });
 
         const newRoster = Object.entries(rosterMap).map(([empId, roster]) => ({
@@ -738,10 +979,28 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
     }
   };
 
+  const lastSyncedDateRef = React.useRef(selectedDate);
+
+  // Sync selectedDate with rosterStartDate/rosterEndDate week range only when selectedDate changes
+  React.useEffect(() => {
+    if (selectedDate !== lastSyncedDateRef.current) {
+      try {
+        const parsedDate = parseISO(selectedDate);
+        const start = format(startOfWeek(parsedDate, { weekStartsOn: 1 }), 'yyyy-MM-dd');
+        const end = format(addDays(startOfWeek(parsedDate, { weekStartsOn: 1 }), 6), 'yyyy-MM-dd');
+        setRosterStartDate(start);
+        setRosterEndDate(end);
+        lastSyncedDateRef.current = selectedDate;
+      } catch (err) {
+        console.error("Error setting roster date range from selectedDate", err);
+      }
+    }
+  }, [selectedDate]);
+
   React.useEffect(() => {
     if (activeTab === "historical") {
       loadIntervalRequirements(histStartDate, histEndDate, histIntervalType, selectedProject);
-    } else if (activeTab === "calendar") {
+    } else if (activeTab === "calendar" || activeTab === "schedule") {
       loadIntervalRequirements(rosterStartDate, rosterEndDate, histIntervalType, selectedProject);
       loadRosterSchedule(rosterStartDate, rosterEndDate, selectedProject);
     }
@@ -767,6 +1026,34 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
       if (deleteConfirmId === id) {
         setDeleteConfirmId(null);
       }
+      // Keep selected list clean of deleted IDs
+      setSelectedDbEmployeeIds(prev => prev.filter(item => item !== id));
+    }
+  };
+
+  // Handler for Bulk Delete
+  const handleBulkDeleteDbEmployees = async () => {
+    if (selectedDbEmployeeIds.length === 0) return;
+    setDbLoading(true);
+    try {
+      if (!usingFallback) {
+        await deleteWorkforceRecords(selectedDbEmployeeIds);
+      }
+      const updatedList = dbEmployees.filter(emp => !selectedDbEmployeeIds.includes(emp.id));
+      setDbEmployees(updatedList);
+      localStorage.setItem("supabase_workforce_fallback", JSON.stringify(updatedList));
+      showNotification(`Berhasil menghapus ${selectedDbEmployeeIds.length} karyawan`, 'success');
+      setSelectedDbEmployeeIds([]);
+    } catch (err) {
+      // Allow fallback delete
+      const updatedList = dbEmployees.filter(emp => !selectedDbEmployeeIds.includes(emp.id));
+      setDbEmployees(updatedList);
+      localStorage.setItem("supabase_workforce_fallback", JSON.stringify(updatedList));
+      showNotification(`Berhasil menghapus ${selectedDbEmployeeIds.length} karyawan (offline mode)`, 'success');
+      setSelectedDbEmployeeIds([]);
+    } finally {
+      setDbLoading(false);
+      setBulkDeleteConfirm(false);
     }
   };
 
@@ -937,27 +1224,35 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
 
   // Compute combined dynamic agents mapping to match roster schema
   const mappedDbEmployees = dbEmployees.map((emp, index) => {
-    const shiftKeys = ["S1", "S2", "H"];
-    const shift = (emp.shift as string) || shiftKeys[index % shiftKeys.length];
+    const empShift = emp.shift as string;
+    const fallbackShiftCode = (empShift && resolvedShifts[empShift]) 
+      ? empShift 
+      : "OFF";
+    const agentId = emp.nip || `DB${String(emp.id).padStart(3, '0')}`;
     
-    // Generate break periods
-    let breakStart = shift === "S1" ? 40 + (index % 16) : shift === "H" ? 56 + (index % 16) : 80 + (index % 12);
+    const rosterEntry = generatedRoster.find(r => r.empId === agentId);
+    const activeShiftCode = rosterEntry?.roster?.[selectedDate] || fallbackShiftCode;
+
+    const customProj = agentActivities[selectedProject] || {};
+    const customDate = customProj[selectedDate] || {};
+    const hasCustomEntry = agentId in customDate;
+    
+    let resolvedActivities = {};
+    if (hasCustomEntry) {
+      resolvedActivities = customDate[agentId] || {};
+    }
     
     return {
-      id: emp.nip || `DB${String(emp.id).padStart(3, '0')}`,
+      id: agentId,
+      nip: emp.nip || agentId,
       name: emp.name,
-      shift: shift,
+      shift: activeShiftCode,
       gender: emp.gender,
       team: ["Support A", "Support B", "High Priority", "Technical"][index % 4],
       site: emp.site || "Jakarta",
       unit: emp.unit || "Unit A",
-      project: emp.project || "Project Alpha",
-      activities: {
-        [(breakStart) % 96]: "LB",
-        [(breakStart + 1) % 96]: "LB",
-        [(breakStart + 2) % 96]: "LB",
-        [(breakStart + 3) % 96]: "LB",
-      }
+      project: emp.project || "",
+      activities: resolvedActivities
     };
   });
 
@@ -972,10 +1267,15 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
     return Array.from({ length: 96 }).map((_, i) => {
       let computedActual = 0;
       filteredAgents.forEach(agent => {
-        const s = resolvedShifts[agent.shift] || resolvedShifts["H"];
+        const rosterEntry = generatedRoster.find(r => r.empId === agent.id);
+        const shiftCode = rosterEntry?.roster?.[selectedDate] || agent.shift;
+        if (shiftCode === "OFF") return;
+        
+        const s = resolvedShifts[shiftCode] || Object.values(resolvedShifts)[0];
         if (s) {
           const startIdx = timeToIndex(s.start);
-          const endIdx = timeToIndex(s.end);
+          let endIdx = timeToIndex(s.end);
+          if (endIdx <= startIdx) endIdx = 96;
           if (startIdx <= i && i < endIdx && !agent.activities[i]) {
             computedActual++;
           }
@@ -983,12 +1283,15 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
       });
 
       const totalAgentsInFilter = filteredAgents.length;
-      let scaledReq = Math.max(1, Math.round(totalAgentsInFilter * 0.8));
-      if (totalAgentsInFilter > 0) {
-        const multiplier = 0.75 + Math.sin(i / 12) * 0.15;
-        scaledReq = Math.max(1, Math.round(totalAgentsInFilter * multiplier));
+      let scaledReq = 0;
+      const targetReqs = histRequirements[selectedDate];
+      if (targetReqs && targetReqs[intervals[i]] !== undefined) {
+          scaledReq = targetReqs[intervals[i]];
       } else {
-        scaledReq = 0;
+        if (totalAgentsInFilter > 0) {
+          const multiplier = 0.75 + Math.sin(i / 12) * 0.15;
+          scaledReq = Math.max(1, Math.round(totalAgentsInFilter * multiplier));
+        }
       }
 
       const discrepancy = computedActual - scaledReq;
@@ -1000,7 +1303,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
         surplus: discrepancy > 0 ? discrepancy : 0
       };
     });
-  }, [combinedAgents, selectedSite, selectedUnit, selectedProject, resolvedShifts]);
+  }, [combinedAgents, selectedSite, selectedUnit, selectedProject, resolvedShifts, generatedRoster, selectedDate, histRequirements]);
 
   const renderOverview = () => {
     const filteredCount = combinedAgents
@@ -1138,14 +1441,29 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
 
     const filteredCount = filteredAgents.length;
 
+    // Helper to get agent's shift configuration for the selected date
+    const getAgentShiftForDate = (agent: any) => {
+      const rosterEntry = generatedRoster.find(r => r.empId === agent.id);
+      const shiftCode = rosterEntry ? rosterEntry.roster[selectedDate] : agent.shift;
+      if (!shiftCode || shiftCode === "OFF") {
+        return null;
+      }
+      return {
+        code: shiftCode,
+        shift: resolvedShifts[shiftCode] || Object.values(resolvedShifts)[0]
+      };
+    };
+
     // Separate sorting logic
     const sortedAgents = [...filteredAgents].sort((a, b) => {
       if (sortConfig.key === 'name') {
         return sortConfig.direction === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name);
       }
       if (sortConfig.key === 'interval') {
-        const shiftA = (resolvedShifts[a.shift] || resolvedShifts["H"]).start;
-        const shiftB = (resolvedShifts[b.shift] || resolvedShifts["H"]).start;
+        const infoA = getAgentShiftForDate(a);
+        const infoB = getAgentShiftForDate(b);
+        const shiftA = infoA ? infoA.shift.start : "24:00";
+        const shiftB = infoB ? infoB.shift.start : "24:00";
         return sortConfig.direction === 'asc' ? shiftA.localeCompare(shiftB) : shiftB.localeCompare(shiftA);
       }
       return 0;
@@ -1242,13 +1560,14 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                     className="absolute top-full right-0 mt-2 w-48 bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 z-[60]"
                    >
                       {[
-                        { label: "Swap Shift", icon: History },
-                        { label: "Approval", icon: ShieldCheck },
-                        { label: "Auto Break", icon: Coffee },
-                        { label: "Download", icon: Download },
+                        { label: "Swap Shift", icon: History, onClick: () => showNotification("Fitur Swap Shift segera hadir! 🔄", "info") },
+                        { label: "Approval", icon: ShieldCheck, onClick: () => showNotification("Fitur Persetujuan/Approval segera hadir! 🛡️", "info") },
+                        { label: "Auto Break", icon: Coffee, onClick: () => { handleAutoBreak(); setShowActions(false); } },
+                        { label: "Download", icon: Download, onClick: () => showNotification("Mengunduh laporan... 💾", "info") },
                       ].map((item, i) => (
                         <button 
                           key={i}
+                          onClick={item.onClick}
                           className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 rounded-xl text-[10px] font-black text-slate-600 uppercase tracking-widest transition-colors"
                         >
                           <item.icon size={14} className="text-slate-400" />
@@ -1262,7 +1581,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
           </div>
 
           {/* The Grid Table */}
-          <div className="overflow-auto relative max-h-[600px]">
+          <div className="overflow-auto relative max-h-[85vh] md:max-h-[950px]">
             <table className="border-separate border-spacing-0 table-fixed w-full min-w-[2800px]">
               <thead className="sticky top-0 z-50">
                 {/* Agent Actual Row */}
@@ -1270,63 +1589,30 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                   <th className="sticky left-0 z-[60] bg-white h-12 w-[180px] sm:w-[220px] px-4 sm:px-6 border-r border-gray-200 border-b border-gray-50 top-0">
                     <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest block text-left">Agent Actual</span>
                   </th>
-                  {intervals.map((_, i) => {
-                    let computedActual = 0;
-                    sortedAgents.forEach(agent => {
-                      const s = resolvedShifts[agent.shift] || resolvedShifts["H"];
-                      const startIdx = timeToIndex(s.start);
-                      const endIdx = timeToIndex(s.end);
-                      if (startIdx <= i && i < endIdx && !agent.activities[i]) {
-                        computedActual++;
-                      }
-                    });
-                    return (
-                      <th key={i} className="text-[8px] sm:text-[9px] font-black text-slate-700 border-b border-gray-50 h-12 align-middle min-w-[28px] px-0.5 text-center bg-white">
-                        {computedActual}
-                      </th>
-                    );
-                  })}
+                  {dynamicReqData.map((data, i) => (
+                    <th key={i} className="text-[8px] sm:text-[9px] font-black text-slate-700 border-b border-gray-50 h-12 align-middle min-w-[28px] px-0.5 text-center bg-white">
+                      {data.actual}
+                    </th>
+                  ))}
                 </tr>
                 {/* Agent FTE Row */}
                 <tr className="bg-white">
                   <th className="sticky left-0 z-[60] bg-white h-12 w-[180px] sm:w-[220px] px-4 sm:px-6 border-r border-gray-200 border-b border-gray-50 top-12">
                     <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest block text-left">Agent FTE</span>
                   </th>
-                  {intervals.map((_, i) => {
-                    let computedActual = 0;
-                    sortedAgents.forEach(agent => {
-                      const s = resolvedShifts[agent.shift] || resolvedShifts["H"];
-                      const startIdx = timeToIndex(s.start);
-                      const endIdx = timeToIndex(s.end);
-                      if (startIdx <= i && i < endIdx && !agent.activities[i]) {
-                        computedActual++;
-                      }
-                    });
-                    const computedFte = Math.round(computedActual * 0.85);
-                    return (
-                      <th key={i} className="text-[8px] sm:text-[9px] font-black text-slate-700 border-b border-gray-50 h-12 align-middle min-w-[28px] px-0.5 text-center bg-white">
-                        {computedFte}
-                      </th>
-                    );
-                  })}
+                  {dynamicReqData.map((data, i) => (
+                    <th key={i} className="text-[8px] sm:text-[9px] font-black text-slate-700 border-b border-gray-50 h-12 align-middle min-w-[28px] px-0.5 text-center bg-white">
+                      {data.req}
+                    </th>
+                  ))}
                 </tr>
                 {/* Coverage Gap Row */}
                 <tr className="bg-slate-50">
                   <th className="sticky left-0 z-[60] bg-slate-50 h-12 w-[180px] sm:w-[220px] px-4 sm:px-6 border-r border-gray-200 border-b border-slate-100 top-24">
                     <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest block text-left">Coverage Gap</span>
                   </th>
-                  {intervals.map((_, i) => {
-                    let computedActual = 0;
-                    sortedAgents.forEach(agent => {
-                      const s = resolvedShifts[agent.shift] || resolvedShifts["H"];
-                      const startIdx = timeToIndex(s.start);
-                      const endIdx = timeToIndex(s.end);
-                      if (startIdx <= i && i < endIdx && !agent.activities[i]) {
-                        computedActual++;
-                      }
-                    });
-                    const computedFte = Math.round(computedActual * 0.85);
-                    const gapValue = computedActual - computedFte;
+                  {dynamicReqData.map((data, i) => {
+                    const gapValue = data.actual - data.req;
                     const isMinus = gapValue < 0; 
                     
                     return (
@@ -1352,9 +1638,11 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
             </thead>
             <tbody className="divide-y divide-gray-50">
               {sortedAgents.map((agent, idx) => {
-                const shift = resolvedShifts[agent.shift] || resolvedShifts["H"];
-                const startIdx = timeToIndex(shift.start);
-                const endIdx = timeToIndex(shift.end);
+                const shiftInfo = getAgentShiftForDate(agent);
+                const shift = shiftInfo?.shift || null;
+                const shiftCode = shiftInfo?.code || "OFF";
+                const startIdx = shift ? timeToIndex(shift.start) : -1;
+                const endIdx = shift ? (timeToIndex(shift.end) <= timeToIndex(shift.start) ? 96 : timeToIndex(shift.end)) : -1;
                 
                 return (
                   <tr key={agent.id} className="hover:bg-gray-50/50 transition-colors group h-10 sm:h-12">
@@ -1362,34 +1650,55 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                       <div className="flex flex-col min-w-0 justify-center h-full gap-0.5">
                         <div className="flex items-center gap-2">
                           <span className="text-[10px] sm:text-[11px] font-bold text-black uppercase tracking-tight truncate">{agent.name}</span>
-                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold text-white ${shift.color}`}>{agent.shift}</span>
+                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold text-white ${shiftCode === "OFF" ? "bg-rose-500" : (shift?.color || "bg-gray-400")}`}>{shiftCode}</span>
                         </div>
-                        <span className="text-[8px] sm:text-[9px] font-bold text-neutral-gray uppercase tracking-widest opacity-60 truncate">
-                          {agent.team} 
-                          {Object.keys(agent.activities).length > 0 && ` • Break: ${intervals[Math.min(...Object.keys(agent.activities).map(Number))]}`}
+                        <span className="text-[8px] sm:text-[9px] font-bold text-neutral-gray uppercase tracking-widest opacity-60 truncate flex items-center justify-between gap-1">
+                          <span className="truncate">
+                            {agent.nip} 
+                            {Object.keys(agent.activities).length > 0 && ` • Break: ${intervals[Math.min(...Object.keys(agent.activities).map(Number))]}`}
+                          </span>
+                          {Object.keys(agent.activities).length > 0 && (
+                            <button
+                              title="Hapus Break Hari Ini"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleClearBreaks(agent.id);
+                              }}
+                              className="p-0.5 hover:bg-rose-50 rounded text-rose-600 transition-colors pointer-events-auto shrink-0"
+                            >
+                              <Trash2 size={11} className="stroke-[2.5]" />
+                            </button>
+                          )}
                         </span>
                       </div>
                     </td>
                     {intervals.map((_, i) => {
-                      const isWithinShift = startIdx <= i && i < endIdx;
+                      const isWithinShift = shift ? (startIdx <= i && i < endIdx) : false;
                       const activities = agent.activities as Record<number, string>;
                       const activityKey = activities[i];
-                      const activity = activityKey ? ACTIVITY_TYPES[activityKey as keyof typeof ACTIVITY_TYPES] : null;
+                      const activity = activityKey ? getActivityDef(activityKey, agent.project) : null;
                       
-                      const isShiftStart = i === startIdx;
-                      const isShiftEnd = i === endIdx - 1;
+                      const isShiftStart = shift ? (i === startIdx) : false;
+                      const isShiftEnd = shift ? (i === endIdx - 1) : false;
                       
                       return (
-                        <td key={i} className="p-0 min-w-[28px] px-0.5 relative cursor-pointer group/cell h-10 sm:h-12 border-b border-gray-100">
-                          {isWithinShift && !activity && (
-                            <div className={`absolute inset-y-2 inset-x-0 bg-slate-200 group-hover/cell:bg-blue-100/50 transition-colors ${isShiftStart ? "rounded-l-full ml-0.5" : ""} ${isShiftEnd ? "rounded-r-full mr-0.5" : ""}`} />
+                        <td 
+                          key={i} 
+                          title={isWithinShift ? (activity ? `${activity.label} (Klik untuk hapus)` : "Kerja (Klik untuk tambah break)") : "Luar Shift"}
+                          className="p-0 min-w-[28px] px-0.5 relative cursor-pointer group/cell h-10 sm:h-12 border-b border-gray-100"
+                          onClick={() => {
+                            if (!isWithinShift) return;
+                            handleToggleCellBreak(agent.id, i, activityKey);
+                          }}
+                        >
+                          {isWithinShift && (
+                            <div className={`absolute inset-y-2 inset-x-0 ${settings.shiftBarColor || "bg-slate-200/70"} group-hover/cell:bg-blue-100/30 transition-colors ${isShiftStart ? "rounded-l-full ml-0.5" : ""} ${isShiftEnd ? "rounded-r-full mr-0.5" : ""}`} />
                           )}
                           {activity && (
                             <div 
-                              className={`absolute inset-y-1.5 inset-x-0 ${activity.color} shadow-sm transition-all hover:brightness-110 z-10 
-                                ${activities[i-1] !== activityKey ? "rounded-l-md" : ""} 
-                                ${activities[i+1] !== activityKey ? "rounded-r-md" : ""}
-                                border-y border-white/10`} 
+                              className={`absolute h-5 sm:h-6 top-1/2 -translate-y-1/2 ${activity.color} transition-all hover:brightness-110 z-10 
+                                ${activities[i-1] !== activityKey ? "rounded-l-full left-0.5 shadow-sm" : "-left-px"} 
+                                ${activities[i+1] !== activityKey ? "rounded-r-full right-0.5 shadow-sm" : "-right-px"}`} 
                             />
                           )}
                           <div className="absolute inset-0 z-20 opacity-0 bg-black/5" />
@@ -1413,12 +1722,19 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
             <div className="w-3 h-3 rounded-md bg-blue-500 shadow-sm" />
             <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">Active Duty</span>
           </div>
-          {Object.entries(ACTIVITY_TYPES).map(([key, act]) => (
-            <div key={key} className="flex items-center gap-3">
-              <div className={`w-3 h-3 rounded-md ${act.color} shadow-sm`} />
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">{act.label}</span>
-            </div>
-          ))}
+          {(() => {
+            const projKey = (selectedProject && selectedProject !== "all") ? selectedProject : "Project Alpha";
+            const projActs = settings.activities?.[projKey] || ACTIVITY_TYPES;
+            return Object.keys(projActs).map((key) => {
+              const act = getActivityDef(key);
+              return (
+                <div key={key} className="flex items-center gap-3">
+                  <div className={`w-3 h-3 rounded-md ${act.color} shadow-sm`} />
+                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">{act.label}</span>
+                </div>
+              );
+            });
+          })()}
           <div className="hidden sm:block h-4 w-px bg-slate-200" />
           <div className="flex items-center gap-2 px-3 py-1 bg-rose-50 rounded-full border border-rose-100">
             <div className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
@@ -1435,7 +1751,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
     const days = getDaysArray(rosterStartDate, rosterEndDate);
 
     const filteredRoster = (generatedRoster || []).filter(r => {
-      const agent = combinedAgents.find(a => a.id === r.empId);
+      const agent = combinedAgents.find(a => String(a.id).trim().toLowerCase() === String(r.empId).trim().toLowerCase());
       if (!agent) return false;
       return matchSite(agent.site, selectedSite) &&
              matchUnit(agent.unit, selectedUnit) &&
@@ -1508,7 +1824,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
              if (compDayTotal > fteTarget && compDayTotal > 0) {
                  finalVal = finalVal * (fteTarget / compDayTotal);
              }
-             histFinalShiftsRounded[hd][code] = Math.round(finalVal);
+             histFinalShiftsRounded[hd][code] = rawShifts[code] > 0 ? Math.max(1, Math.round(finalVal)) : 0;
           });
       });
 
@@ -1567,7 +1883,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                  if (compDayTotal > fteDayTotal && compDayTotal > 0) {
                      val = val * (fteDayTotal / compDayTotal);
                  }
-                 requiredSlotsPerDayPerShift[d][code] = Math.round(val);
+                 requiredSlotsPerDayPerShift[d][code] = (rawShiftValues[code] || 0) > 0 ? Math.max(1, Math.round(val)) : 0;
              } else if (dowCount[dow] > 0) {
                  requiredSlotsPerDayPerShift[d][code] = Math.round(dowSum[dow][code] / dowCount[dow]);
              } else if (globalCount > 0) {
@@ -2291,7 +2607,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
              if (compositionMode !== 'peak' && compDayTotal > fteTarget && compDayTotal > 0) {
                  finalVal = finalVal * (fteTarget / compDayTotal);
              }
-             histFinalShiftsRounded[hd][code] = Math.round(finalVal);
+             histFinalShiftsRounded[hd][code] = rawShifts[code] > 0 ? Math.max(1, Math.round(finalVal)) : 0;
           });
       });
 
@@ -2350,7 +2666,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                  if (compDayTotal > fteDayTotal && compDayTotal > 0) {
                      val = val * (fteDayTotal / compDayTotal);
                  }
-                 requiredSlotsPerDayPerShift[d][code] = Math.round(val);
+                 requiredSlotsPerDayPerShift[d][code] = (rawShiftValues[code] || 0) > 0 ? Math.max(1, Math.round(val)) : 0;
              } else if (dowCount[dow] > 0) {
                  requiredSlotsPerDayPerShift[d][code] = Math.round(dowSum[dow][code] / dowCount[dow]);
              } else if (globalCount > 0) {
@@ -3298,9 +3614,10 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                     .filter(a => matchSite(a.site, selectedSite))
                     .filter(a => matchUnit(a.unit, selectedUnit))
                     .filter(a => matchProject(a.project, selectedProject))
-                    .filter(a => generatedRoster.some(r => r.empId === a.id))
+                    .filter(a => generatedRoster.some(r => String(r.empId).trim().toLowerCase() === String(a.id).trim().toLowerCase()))
                     .map((agent) => {
-                      const rosterInfo = generatedRoster.find(r => r.empId === agent.id)!;
+                      const rosterInfo = generatedRoster.find(r => String(r.empId).trim().toLowerCase() === String(agent.id).trim().toLowerCase());
+                      const rosterMap = rosterInfo?.roster || {};
                       const genderStr = agent.gender ? agent.gender.charAt(0).toUpperCase() : '?';
                       
                       return (
@@ -3320,7 +3637,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                             // Instant visual update for current generated roster view
                             if (!isForcedOff) {
                                 setGeneratedRoster(prev => prev.map(r => {
-                                    if (r.empId === agent.id) {
+                                    if (String(r.empId).trim().toLowerCase() === String(agent.id).trim().toLowerCase()) {
                                         const offR = { ...r.roster };
                                         days.forEach(d => offR[d] = 'OFF');
                                         return { ...r, roster: offR };
@@ -3345,7 +3662,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                           </div>
                         </td>
                         {days.map((d, i) => {
-                          const shiftCode = rosterInfo.roster[d] || 'OFF';
+                          const shiftCode = rosterMap[d] || 'OFF';
                           const isOff = shiftCode === 'OFF';
                           
                           const shiftInfo = (Object.keys(dbShifts).length > 0 ? dbShifts : SHIFTS)[shiftCode] || { color: 'bg-slate-200' };
@@ -3362,8 +3679,8 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                           );
                         })}
                         {(() => {
-                          const workDays = days.filter(d => rosterInfo.roster[d] && rosterInfo.roster[d] !== 'OFF').length;
-                          const offDays = days.filter(d => !rosterInfo.roster[d] || rosterInfo.roster[d] === 'OFF').length;
+                          const workDays = days.filter(d => rosterMap[d] && rosterMap[d] !== 'OFF').length;
+                          const offDays = days.filter(d => !rosterMap[d] || rosterMap[d] === 'OFF').length;
                           return (
                             <>
                               <td className="p-1 border-r border-gray-50/50 text-center bg-indigo-50/10 font-bold min-w-[90px]">
@@ -3585,7 +3902,10 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                   .filter(a => matchUnit(a.unit, selectedUnit))
                   .filter(a => matchProject(a.project, selectedProject))
                   .map((agent) => {
-                  const shift = resolvedShifts[agent.shift] || resolvedShifts["H"];
+                  const dummyShiftInfo = generatedRoster.find(r => r.empId === agent.id);
+                  const activeShiftCode = dummyShiftInfo?.roster?.[selectedDate] || agent.shift;
+                  if (activeShiftCode === "OFF") return null;
+                  const shift = resolvedShifts[activeShiftCode] || Object.values(resolvedShifts)[0];
                   const isLate = Math.random() > 0.8;
                   const checkIn = isLate ? `${shift.start.split(":")[0]}:0${Math.floor(Math.random() * 9) + 5}` : shift.start;
                   
@@ -4092,7 +4412,13 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                   const finalDayTotals: Record<string, number> = {};
                   days.forEach(d => { finalDayTotals[d] = 0; });
 
-                  const rows = Object.entries(compositionShifts).map(([code, sInfo]) => {
+                  const rows = Object.entries(compositionShifts)
+                    .sort((a, b) => {
+                      const wA = (a[1] as any).weight !== undefined ? (a[1] as any).weight : 1;
+                      const wB = (b[1] as any).weight !== undefined ? (b[1] as any).weight : 1;
+                      return wA - wB;
+                    })
+                    .map(([code, sInfo]) => {
                     return (
                       <tr key={code} className="hover:bg-slate-50/50 transition-colors">
                         <td className="px-3 py-1.5 border-r border-slate-200 font-mono font-black bg-slate-50 text-slate-800">
@@ -4106,11 +4432,12 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
 
                         {days.map((d) => {
                           let val = rawShiftValues[code][d];
+                          const rawVal = val;
                           // Cap scaling down if exceeding FTE
                           if (compDayTotals[d] > fteDayTotals[d] && compDayTotals[d] > 0) {
                             val = val * (fteDayTotals[d] / compDayTotals[d]);
                           }
-                          val = Math.round(val);
+                          val = rawVal > 0 ? Math.max(1, Math.round(val)) : 0;
                           finalDayTotals[d] += val;
                           
                           const isActive = val > 0;
@@ -4180,7 +4507,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
             </div>
           </div>
 
-          <div className="overflow-x-auto flex-grow max-h-[600px] overflow-y-auto">
+          <div className="overflow-x-auto flex-grow max-h-[85vh] md:max-h-[900px] overflow-y-auto">
             <table className="w-full text-left border-collapse table-fixed min-w-[800px]">
               <thead className="sticky top-0 z-50 bg-slate-100 shadow-sm select-none">
                 {/* Visual Header 1: Weeks indicator */}
@@ -4360,7 +4687,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
             </div>
           </div>
 
-          <div className="overflow-x-auto flex-grow max-h-[600px] overflow-y-auto">
+          <div className="overflow-x-auto flex-grow max-h-[85vh] md:max-h-[900px] overflow-y-auto">
             <table className="w-full text-left border-collapse table-fixed min-w-[800px]">
               <thead className="sticky top-0 z-50 bg-slate-100 shadow-sm select-none">
                 {/* Visual Header 1: Weeks indicator */}
@@ -4527,7 +4854,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
             </div>
           </div>
 
-          <div className="overflow-x-auto flex-grow max-h-[600px] overflow-y-auto">
+          <div className="overflow-x-auto flex-grow max-h-[85vh] md:max-h-[900px] overflow-y-auto">
             <table className="w-full text-left border-collapse table-fixed min-w-[800px]">
               <thead className="sticky top-0 z-50 bg-slate-100 shadow-sm select-none">
                 {/* Visual Header 1: Weeks indicator */}
@@ -4920,11 +5247,48 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
 
         {/* Database Workers Table View */}
         <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
-          <div className="p-6 border-b border-gray-50 flex items-center justify-between">
-            <h4 className="text-base font-black text-black uppercase tracking-tight font-sans">Daftar Karyawan di Database ({filteredDbEmployees.length})</h4>
-            <div className="text-[10px] font-black uppercase tracking-widest text-[#6366f1]">
-              Live Connection
+          <div className="p-6 border-b border-gray-50 flex items-center justify-between flex-wrap gap-4">
+            <div className="flex items-center gap-3">
+              <h4 className="text-base font-black text-black uppercase tracking-tight font-sans">Daftar Karyawan di Database ({filteredDbEmployees.length})</h4>
+              {selectedDbEmployeeIds.length > 0 && (
+                <span className="px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[9px] font-black uppercase tracking-wider animate-in zoom-in-95">
+                  {selectedDbEmployeeIds.length} Terpilih
+                </span>
+              )}
             </div>
+
+            {selectedDbEmployeeIds.length > 0 ? (
+              <div className="flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                {bulkDeleteConfirm ? (
+                  <div className="flex items-center gap-1.5 bg-rose-50 p-1.5 rounded-2xl border border-rose-100">
+                    <span className="text-[9px] font-black uppercase text-rose-700 px-2 font-sans">Yakin hapus {selectedDbEmployeeIds.length} karyawan?</span>
+                    <button
+                      onClick={handleBulkDeleteDbEmployees}
+                      className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-[9px] font-black uppercase text-white tracking-widest rounded-xl transition-all shadow-sm font-sans"
+                    >
+                      Ya, Hapus!
+                    </button>
+                    <button
+                      onClick={() => setBulkDeleteConfirm(false)}
+                      className="px-2.5 py-1.5 bg-white hover:bg-gray-50 border border-gray-100 text-[9px] font-black uppercase text-gray-600 tracking-widest rounded-xl transition-all font-sans"
+                    >
+                      Batal
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setBulkDeleteConfirm(true)}
+                    className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 active:bg-rose-200 text-[9px] font-black uppercase text-active-red tracking-widest rounded-xl transition-all flex items-center gap-1.5 hover:scale-[1.02] font-sans"
+                  >
+                    <Trash2 size={12} className="text-active-red" /> Bulk Hapus
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="text-[10px] font-black uppercase tracking-widest text-[#6366f1]">
+                Live Connection
+              </div>
+            )}
           </div>
 
           {dbError ? (
@@ -4952,6 +5316,20 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
               <table className="w-full text-left border-collapse min-w-[900px]">
                 <thead className="bg-gray-50/50">
                   <tr>
+                    <th className="px-4 py-4 border-b border-gray-100 w-12 text-center">
+                      <input
+                        type="checkbox"
+                        className="rounded border-gray-300 text-[#6366f1] focus:ring-[#6366f1] cursor-pointer w-3.5 h-3.5 transition-all"
+                        checked={filteredDbEmployees.length > 0 && filteredDbEmployees.every(emp => selectedDbEmployeeIds.includes(emp.id))}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedDbEmployeeIds(filteredDbEmployees.map(emp => emp.id));
+                          } else {
+                            setSelectedDbEmployeeIds([]);
+                          }
+                        }}
+                      />
+                    </th>
                     <th className="px-4 py-4 text-[10px] font-black text-neutral-gray uppercase tracking-widest border-b border-gray-100 font-sans">No</th>
                     <th className="px-4 py-4 text-[10px] font-black text-neutral-gray uppercase tracking-widest border-b border-gray-100 font-sans">NIP</th>
                     <th className="px-4 py-4 text-[10px] font-black text-neutral-gray uppercase tracking-widest border-b border-gray-100 font-sans">Name</th>
@@ -4966,9 +5344,25 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
-                  {filteredDbEmployees.map((emp, idx) => (
-                    <tr key={emp.id} className="hover:bg-gray-50/50 transition-colors">
-                      <td className="px-4 py-4 text-[11px] font-bold text-neutral-gray font-mono">{idx + 1}</td>
+                  {filteredDbEmployees.map((emp, idx) => {
+                    const isSelected = selectedDbEmployeeIds.includes(emp.id);
+                    return (
+                      <tr key={emp.id} className={`hover:bg-gray-50/50 transition-colors ${isSelected ? 'bg-indigo-50/30' : ''}`}>
+                        <td className="px-4 py-4 text-center w-12">
+                          <input
+                            type="checkbox"
+                            className="rounded border-gray-300 text-[#6366f1] focus:ring-[#6366f1] cursor-pointer w-3.5 h-3.5 transition-all"
+                            checked={isSelected}
+                            onChange={() => {
+                              setSelectedDbEmployeeIds(prev =>
+                                prev.includes(emp.id)
+                                  ? prev.filter(id => id !== emp.id)
+                                  : [...prev, emp.id]
+                              );
+                            }}
+                          />
+                        </td>
+                        <td className="px-4 py-4 text-[11px] font-bold text-neutral-gray font-mono">{idx + 1}</td>
                       <td className="px-4 py-4 text-[11px] font-bold text-black font-mono">{emp.nip}</td>
                       <td className="px-4 py-4 text-[11px] font-black text-black uppercase font-sans">{emp.name}</td>
                       <td className="px-4 py-4 text-[11px] font-bold text-neutral-gray font-sans">{emp.skill || "-"}</td>
@@ -5004,7 +5398,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                         )}
                       </td>
                     </tr>
-                  ))}
+                  ); })}
                 </tbody>
               </table>
             </div>
@@ -5173,7 +5567,9 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                           .filter(a => matchUnit(a.unit, selectedUnit))
                           .filter(a => matchProject(a.project, selectedProject))
                           .map((agent) => {
-                          const shift = resolvedShifts[agent.shift] || resolvedShifts["H"];
+                          const shiftInfoRow = generatedRoster.find(r => r.empId === agent.id);
+                          const activeShiftCodeRow = shiftInfoRow?.roster?.[selectedDate] || agent.shift;
+                          const shift = activeShiftCodeRow === "OFF" ? { start: "OFF", end: "OFF" } : resolvedShifts[activeShiftCodeRow] || Object.values(resolvedShifts)[0];
                           const startPct = (timeToIndex(shift.start) / 96) * 100;
                           const endPct = (timeToIndex(shift.end) / 96) * 100;
                           
@@ -5203,7 +5599,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                                          return (
                                            <div 
                                              key={idx} 
-                                             className={`absolute h-full ${ACTIVITY_TYPES[act as keyof typeof ACTIVITY_TYPES]?.color || 'bg-black'}`}
+                                             className={`absolute h-full ${getActivityDef(act as string, agent.project)?.color || 'bg-black'}`}
                                              style={{ left: `${l}%`, width: `${w}%` }}
                                            />
                                          );

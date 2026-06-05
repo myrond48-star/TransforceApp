@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useAppStore } from "./lib/store.ts";
 import { motion, AnimatePresence } from "motion/react";
 import LoginPage from "./components/LoginPage.tsx";
 import WorkforceModule from "./components/WorkforceModule.tsx";
@@ -104,6 +105,14 @@ const itemVariants = {
 
 export default function App() {
   console.log("App component initializing...");
+  const syncSettingsFromDB = useAppStore((state) => state.syncSettingsFromDB);
+  
+  useEffect(() => {
+    syncSettingsFromDB().catch((err) => {
+      console.warn("Failed to complete remote settings fetch on login / mount:", err);
+    });
+  }, [syncSettingsFromDB]);
+
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
     return localStorage.getItem("isLoggedIn") === "true" || sessionStorage.getItem("isLoggedIn") === "true";
   });

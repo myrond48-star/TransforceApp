@@ -115,6 +115,70 @@ async function startServer() {
     }
   });
 
+  // Automated Supabase/PostgreSQL Table Initializer Execution Endpoint
+  app.post("/api/db/initialize-tables", async (req, res) => {
+    const { connectionString } = req.body;
+    const targetUrl = connectionString || currentDbUrl;
+
+    if (!targetUrl) {
+      return res.status(400).json({ 
+        status: "error",
+        error: "Connection string tidak ditemukan. Kirim PostgreSQL URI di JSON body atau atur DATABASE_URL di environment." 
+      });
+    }
+
+    let tempClient: pg.Client | null = null;
+    try {
+      const fs = await import("fs");
+      const path = await import("path");
+      
+      const sqlFilePath = path.join(process.cwd(), "supabase_schema.sql");
+      if (!fs.existsSync(sqlFilePath)) {
+        return res.status(500).json({ 
+          status: "error", 
+          error: "Berkas 'supabase_schema.sql' tidak ditemukan di root workspace." 
+        });
+      }
+
+      console.log("[DB INIT] Membuka koneksi sementara ke PostgreSQL...");
+      const isLocalhost = targetUrl.includes("localhost") || targetUrl.includes("127.0.0.1");
+      
+      tempClient = new pg.Client({
+        connectionString: targetUrl,
+        ssl: isLocalhost ? false : { rejectUnauthorized: false }
+      });
+
+      await tempClient.connect();
+
+      console.log("[DB INIT] Membaca schema SQL dari supabase_schema.sql...");
+      const sqlSource = fs.readFileSync(sqlFilePath, "utf8");
+
+      console.log("[DB INIT] Mengeksekusi script DDL di Supabase / PostgreSQL...");
+      // Executes all statements separated by semicolons in a single multi-statement block
+      await tempClient.query(sqlSource);
+
+      console.log("[DB INIT] Inisialisasi tabel selesai dengan sukses!");
+      await tempClient.end();
+      tempClient = null;
+
+      res.json({
+        status: "success",
+        message: "Tabel-tabel workforce, roster_schedule, interval_requirements, master_shifts, dan portal_settings berhasil dibuat di Supabase! Kebijakan RLS (Row Level Security) juga telah diaktifkan."
+      });
+    } catch (err: any) {
+      console.error("[DB INIT] Error inisialisasi tabel:", err);
+      if (tempClient) {
+        try {
+          await tempClient.end();
+        } catch (_) {}
+      }
+      res.status(500).json({
+        status: "error",
+        error: err.message || "Gagal mengeksekusi migrasi SQL di database"
+      });
+    }
+  });
+
   // Example SQL Query Route - Secure
   app.get("/api/users", authenticateToken, async (req, res) => {
     try {

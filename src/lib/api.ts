@@ -223,6 +223,24 @@ export async function fetchUniqueProjects() {
   }
 }
 
+export async function fetchUniqueChannelsForProject(project: string) {
+  try {
+    const { data, error } = await supabase
+      .from('workforce')
+      .select('channel')
+      .eq('project', project);
+    if (error) throw error;
+    if (data && data.length > 0) {
+      const channels = Array.from(new Set(data.map((r: any) => r.channel).filter(Boolean))) as string[];
+      return channels.filter(c => typeof c === 'string' && c.trim() !== "").sort();
+    }
+    return [];
+  } catch (err: any) {
+    console.warn(`Could not fetch unique channels for project ${project} from database:`, err.message);
+    return [];
+  }
+}
+
 export async function createWorkforceRecord(record: any) {
   try {
     const { data, error } = await supabase
@@ -249,6 +267,21 @@ export async function deleteWorkforceRecord(id: string | number) {
     return true;
   } catch (err: any) {
     console.warn("Could not delete from 'workforce' table on Supabase. Using local fallback:", err.message);
+    throw err;
+  }
+}
+
+export async function deleteWorkforceRecords(ids: (string | number)[]) {
+  try {
+    const { error } = await supabase
+      .from('workforce')
+      .delete()
+      .in('id', ids);
+    
+    if (error) throw error;
+    return true;
+  } catch (err: any) {
+    console.warn("Could not bulk delete from 'workforce' table on Supabase. Using local fallback:", err.message);
     throw err;
   }
 }
@@ -430,6 +463,53 @@ export async function upsertMasterShifts(project: string, records: any[]) {
     throw err;
   }
 }
+
+/**
+ * Portal Settings Cloud Persistence Helpers
+ */
+export async function fetchPortalSettings() {
+  try {
+    console.log("Fetching portal_settings from Supabase...");
+    const { data, error } = await supabase
+      .from('portal_settings')
+      .select('settings')
+      .eq('id', 'default')
+      .maybeSingle();
+
+    if (error) {
+      console.warn("Could not fetch settings from 'portal_settings' table: ", error.message);
+      return null;
+    }
+    return data?.settings || null;
+  } catch (err: any) {
+    console.warn("Could not fetch portal_settings table:", err.message);
+    return null;
+  }
+}
+
+export async function upsertPortalSettings(settings: any) {
+  try {
+    console.log("Upserting portal_settings to Supabase...", settings);
+    // Strip sensitive/local API config (apiUrl, apiKey) to avoid publishing it to public settings table if users prefer private config
+    const safeSettings = { ...settings };
+    
+    const { data, error } = await supabase
+      .from('portal_settings')
+      .upsert({ 
+        id: 'default', 
+        settings: safeSettings, 
+        updated_at: new Date().toISOString() 
+      }, { onConflict: 'id' })
+      .select();
+
+    if (error) throw error;
+    return data || [];
+  } catch (err: any) {
+    console.warn("Could not save to 'portal_settings' table:", err.message);
+    throw err;
+  }
+}
+
 
 
 
