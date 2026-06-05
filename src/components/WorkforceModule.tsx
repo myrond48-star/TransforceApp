@@ -468,7 +468,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
     };
     loadAllShifts();
   }, [selectedProject]);
-  const [sortConfig, setSortConfig] = useState<{ key: 'name' | 'interval' | 'activity', direction: 'asc' | 'desc' }>({ key: 'name', direction: 'asc' });
+  const [sortConfig, setSortConfig] = useState<{ key: 'name' | 'interval' | 'activity', direction: 'asc' | 'desc' }>({ key: 'interval', direction: 'asc' });
   const [showActions, setShowActions] = useState(false);
 
   // DB Tab States & Helpers (Separate Custom Workforce DB)
@@ -1267,18 +1267,43 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
     return Array.from({ length: 96 }).map((_, i) => {
       let computedActual = 0;
       filteredAgents.forEach(agent => {
+        let isWorkingNow = false;
+
+        // Check if working shift assigned for today
         const rosterEntry = generatedRoster.find(r => r.empId === agent.id);
         const shiftCode = rosterEntry?.roster?.[selectedDate] || agent.shift;
-        if (shiftCode === "OFF") return;
-        
-        const s = resolvedShifts[shiftCode] || Object.values(resolvedShifts)[0];
-        if (s) {
-          const startIdx = timeToIndex(s.start);
-          let endIdx = timeToIndex(s.end);
-          if (endIdx <= startIdx) endIdx = 96;
-          if (startIdx <= i && i < endIdx && !agent.activities[i]) {
-            computedActual++;
+        if (shiftCode && shiftCode !== "OFF") {
+          const s = resolvedShifts[shiftCode] || Object.values(resolvedShifts)[0];
+          if (s) {
+            const startIdx = timeToIndex(s.start);
+            let endIdx = timeToIndex(s.end);
+            if (endIdx <= startIdx) endIdx = 96;
+            if (startIdx <= i && i < endIdx && !agent.activities[i]) {
+              isWorkingNow = true;
+            }
           }
+        }
+
+        // Check if working overnight shift assigned for yesterday (continuation)
+        if (!isWorkingNow) {
+          const yesterdayDate = format(addDays(new Date(selectedDate), -1), "yyyy-MM-dd");
+          const yesterdayShiftCode = rosterEntry?.roster?.[yesterdayDate] || agent.shift;
+          if (yesterdayShiftCode && yesterdayShiftCode !== "OFF") {
+            const sY = resolvedShifts[yesterdayShiftCode] || Object.values(resolvedShifts)[0];
+            if (sY) {
+              const yStartIdx = timeToIndex(sY.start);
+              const yEndIdx = timeToIndex(sY.end);
+              if (yEndIdx <= yStartIdx && yEndIdx > 0) {
+                if (0 <= i && i < yEndIdx && !agent.activities[i]) {
+                  isWorkingNow = true;
+                }
+              }
+            }
+          }
+        }
+
+        if (isWorkingNow) {
+          computedActual++;
         }
       });
 
@@ -1441,10 +1466,10 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
 
     const filteredCount = filteredAgents.length;
 
-    // Helper to get agent's shift configuration for the selected date
-    const getAgentShiftForDate = (agent: any) => {
+    // Helper to get agent's shift configuration for the selected date (can be specified)
+    const getAgentShiftForDate = (agent: any, targetDate: string = selectedDate) => {
       const rosterEntry = generatedRoster.find(r => r.empId === agent.id);
-      const shiftCode = rosterEntry ? rosterEntry.roster[selectedDate] : agent.shift;
+      const shiftCode = rosterEntry ? rosterEntry.roster[targetDate] : agent.shift;
       if (!shiftCode || shiftCode === "OFF") {
         return null;
       }
@@ -1637,77 +1662,135 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {sortedAgents.map((agent, idx) => {
-                const shiftInfo = getAgentShiftForDate(agent);
-                const shift = shiftInfo?.shift || null;
-                const shiftCode = shiftInfo?.code || "OFF";
-                const startIdx = shift ? timeToIndex(shift.start) : -1;
-                const endIdx = shift ? (timeToIndex(shift.end) <= timeToIndex(shift.start) ? 96 : timeToIndex(shift.end)) : -1;
-                
-                return (
-                  <tr key={agent.id} className="hover:bg-gray-50/50 transition-colors group h-10 sm:h-12">
-                    <td className="sticky left-0 z-40 bg-white group-hover:bg-gray-50/80 border-r border-gray-200 px-4 sm:px-6 py-1.5 transition-colors">
-                      <div className="flex flex-col min-w-0 justify-center h-full gap-0.5">
-                        <div className="flex items-center gap-2">
-                          <span className="text-[10px] sm:text-[11px] font-bold text-black uppercase tracking-tight truncate">{agent.name}</span>
-                          <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold text-white ${shiftCode === "OFF" ? "bg-rose-500" : (shift?.color || "bg-gray-400")}`}>{shiftCode}</span>
-                        </div>
-                        <span className="text-[8px] sm:text-[9px] font-bold text-neutral-gray uppercase tracking-widest opacity-60 truncate flex items-center justify-between gap-1">
-                          <span className="truncate">
-                            {agent.nip} 
-                            {Object.keys(agent.activities).length > 0 && ` • Break: ${intervals[Math.min(...Object.keys(agent.activities).map(Number))]}`}
+              {(() => {
+                const combinedRows = sortedAgents.flatMap((agent) => {
+                  const items = [];
+
+                  // Check yesterday's shift for overnight continuation (e.g., M1, M3 starting at 21:00 or 22:00)
+                  const yesterdayDate = format(addDays(new Date(selectedDate), -1), "yyyy-MM-dd");
+                  const yesterdayShiftInfo = getAgentShiftForDate(agent, yesterdayDate);
+                  const yesterdayShift = yesterdayShiftInfo?.shift || null;
+                  const yesterdayShiftCode = yesterdayShiftInfo?.code || "OFF";
+                  
+                  if (yesterdayShift && yesterdayShiftCode !== "OFF") {
+                    const yStartIdx = timeToIndex(yesterdayShift.start);
+                    const yEndIdx = timeToIndex(yesterdayShift.end);
+                    // If it crosses midnight
+                    if (yEndIdx <= yStartIdx && yEndIdx > 0) {
+                      items.push({
+                        agent,
+                        rowKey: `${agent.id}-continuation`,
+                        isContinuation: true,
+                        shiftCode: yesterdayShiftCode,
+                        shift: yesterdayShift,
+                        startIdx: 0,
+                        endIdx: yEndIdx
+                      });
+                    }
+                  }
+
+                  // Standard today shift row
+                  const todayShiftInfo = getAgentShiftForDate(agent, selectedDate);
+                  const todayShift = todayShiftInfo?.shift || null;
+                  const todayShiftCode = todayShiftInfo?.code || "OFF";
+                  const todayStartIdx = todayShift ? timeToIndex(todayShift.start) : -1;
+                  const todayEndIdx = todayShift ? (timeToIndex(todayShift.end) <= timeToIndex(todayShift.start) ? 96 : timeToIndex(todayShift.end)) : -1;
+
+                  items.push({
+                    agent,
+                    rowKey: `${agent.id}-today`,
+                    isContinuation: false,
+                    shiftCode: todayShiftCode,
+                    shift: todayShift,
+                    startIdx: todayStartIdx,
+                    endIdx: todayEndIdx
+                  });
+
+                  return items;
+                });
+
+                const sortedCombinedRows = [...combinedRows].sort((rowA, rowB) => {
+                  const isDupA = rowA.isContinuation && (rowA.shiftCode === "M1" || rowA.shiftCode === "M3");
+                  const isDupB = rowB.isContinuation && (rowB.shiftCode === "M1" || rowB.shiftCode === "M3");
+
+                  if (isDupA && !isDupB) return -1;
+                  if (!isDupA && isDupB) return 1;
+                  return 0;
+                });
+
+                return sortedCombinedRows.map(({ agent, rowKey, isContinuation, shiftCode, shift, startIdx, endIdx }) => {
+                  return (
+                    <tr key={rowKey} className="hover:bg-gray-50/50 transition-colors group h-10 sm:h-12">
+                      <td className="sticky left-0 z-40 bg-white group-hover:bg-gray-50/80 border-r border-gray-200 px-4 sm:px-6 py-1.5 transition-colors">
+                        <div className="flex flex-col min-w-0 justify-center h-full gap-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] sm:text-[11px] font-bold text-black uppercase tracking-tight truncate">
+                              {agent.name}
+                              {isContinuation && (
+                                <span className="text-[8px] text-indigo-700 bg-indigo-50 border border-indigo-100 rounded px-1.5 py-0.5 ml-2 font-black uppercase tracking-widest leading-none">
+                                  Cont.
+                                </span>
+                              )}
+                            </span>
+                            <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold text-white ${shiftCode === "OFF" ? "bg-rose-500" : (shift?.color || "bg-gray-400")}`}>{shiftCode}</span>
+                          </div>
+                          <span className="text-[8px] sm:text-[9px] font-bold text-neutral-gray uppercase tracking-widest opacity-60 truncate flex items-center justify-between gap-1">
+                            <span className="truncate">
+                              {agent.nip} 
+                              {Object.keys(agent.activities).length > 0 && ` • Break: ${intervals[Math.min(...Object.keys(agent.activities).map(Number))]}`}
+                            </span>
+                            {Object.keys(agent.activities).length > 0 && (
+                              <button
+                                title="Hapus Break Hari Ini"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleClearBreaks(agent.id);
+                                }}
+                                className="p-0.5 hover:bg-rose-50 rounded text-rose-600 transition-colors pointer-events-auto shrink-0"
+                              >
+                                <Trash2 size={11} className="stroke-[2.5]" />
+                              </button>
+                            )}
                           </span>
-                          {Object.keys(agent.activities).length > 0 && (
-                            <button
-                              title="Hapus Break Hari Ini"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleClearBreaks(agent.id);
-                              }}
-                              className="p-0.5 hover:bg-rose-50 rounded text-rose-600 transition-colors pointer-events-auto shrink-0"
-                            >
-                              <Trash2 size={11} className="stroke-[2.5]" />
-                            </button>
-                          )}
-                        </span>
-                      </div>
-                    </td>
-                    {intervals.map((_, i) => {
-                      const isWithinShift = shift ? (startIdx <= i && i < endIdx) : false;
-                      const activities = agent.activities as Record<number, string>;
-                      const activityKey = activities[i];
-                      const activity = activityKey ? getActivityDef(activityKey, agent.project) : null;
-                      
-                      const isShiftStart = shift ? (i === startIdx) : false;
-                      const isShiftEnd = shift ? (i === endIdx - 1) : false;
-                      
-                      return (
-                        <td 
-                          key={i} 
-                          title={isWithinShift ? (activity ? `${activity.label} (Klik untuk hapus)` : "Kerja (Klik untuk tambah break)") : "Luar Shift"}
-                          className="p-0 min-w-[28px] px-0.5 relative cursor-pointer group/cell h-10 sm:h-12 border-b border-gray-100"
-                          onClick={() => {
-                            if (!isWithinShift) return;
-                            handleToggleCellBreak(agent.id, i, activityKey);
-                          }}
-                        >
-                          {isWithinShift && (
-                            <div className={`absolute inset-y-2 inset-x-0 ${settings.shiftBarColor || "bg-slate-200/70"} group-hover/cell:bg-blue-100/30 transition-colors ${isShiftStart ? "rounded-l-full ml-0.5" : ""} ${isShiftEnd ? "rounded-r-full mr-0.5" : ""}`} />
-                          )}
-                          {activity && (
-                            <div 
-                              className={`absolute h-5 sm:h-6 top-1/2 -translate-y-1/2 ${activity.color} transition-all hover:brightness-110 z-10 
-                                ${activities[i-1] !== activityKey ? "rounded-l-full left-0.5 shadow-sm" : "-left-px"} 
-                                ${activities[i+1] !== activityKey ? "rounded-r-full right-0.5 shadow-sm" : "-right-px"}`} 
-                            />
-                          )}
-                          <div className="absolute inset-0 z-20 opacity-0 bg-black/5" />
-                        </td>
-                      );
-                    })}
-                  </tr>
-                );
-              })}
+                        </div>
+                      </td>
+                      {intervals.map((_, i) => {
+                        const isWithinShift = shift ? (startIdx <= i && i < endIdx) : false;
+                        const activities = agent.activities as Record<number, string>;
+                        const activityKey = activities[i];
+                        const activity = activityKey ? getActivityDef(activityKey, agent.project) : null;
+                        
+                        const isShiftStart = shift ? (i === startIdx) : false;
+                        const isShiftEnd = shift ? (i === endIdx - 1) : false;
+                        
+                        return (
+                          <td 
+                            key={i} 
+                            title={isWithinShift ? (activity ? `${activity.label} (Klik untuk hapus)` : "Kerja (Klik untuk tambah break)") : "Luar Shift"}
+                            className="p-0 min-w-[28px] px-0.5 relative cursor-pointer group/cell h-10 sm:h-12 border-b border-gray-100"
+                            onClick={() => {
+                              if (!isWithinShift) return;
+                              handleToggleCellBreak(agent.id, i, activityKey);
+                            }}
+                          >
+                            {isWithinShift && (
+                              <div className={`absolute inset-y-2 inset-x-0 ${settings.shiftBarColor || "bg-slate-200/70"} group-hover/cell:bg-blue-100/30 transition-colors ${isShiftStart ? "rounded-l-full ml-0.5" : ""} ${isShiftEnd ? "rounded-r-full mr-0.5" : ""}`} />
+                            )}
+                            {isWithinShift && activity && (
+                              <div 
+                                className={`absolute h-5 sm:h-6 top-1/2 -translate-y-1/2 ${activity.color} transition-all hover:brightness-110 z-10 
+                                  ${activities[i-1] !== activityKey ? "rounded-l-full left-0.5 shadow-sm" : "-left-px"} 
+                                  ${activities[i+1] !== activityKey ? "rounded-r-full right-0.5 shadow-sm" : "-right-px"}`} 
+                              />
+                            )}
+                            <div className="absolute inset-0 z-20 opacity-0 bg-black/5" />
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                });
+              })()}
             </tbody>
           </table>
         </div>
