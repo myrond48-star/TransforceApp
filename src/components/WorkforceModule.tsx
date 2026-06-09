@@ -511,9 +511,17 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
   const [sortConfig, setSortConfig] = useState<{ key: 'name' | 'interval' | 'activity', direction: 'asc' | 'desc' }>({ key: 'interval', direction: 'asc' });
   const [showActions, setShowActions] = useState(false);
   const [showBulkRemoveModal, setShowBulkRemoveModal] = useState(false);
+  const [breakModalTab, setBreakModalTab] = useState<'auto' | 'remove'>('auto');
   const [bulkRemoveStart, setBulkRemoveStart] = useState("");
   const [bulkRemoveEnd, setBulkRemoveEnd] = useState("");
   const [bulkRemoveTarget, setBulkRemoveTarget] = useState<"all" | "filtered">("all");
+
+  const [durationModalData, setDurationModalData] = useState<{
+    agentId: string;
+    slotIdx: number;
+    activityCode: string;
+  } | null>(null);
+  const [customSlots, setCustomSlots] = useState<number>(2);
 
   const [cellContextMenu, setCellContextMenu] = useState<{
     x: number;
@@ -521,6 +529,59 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
     agentId: string;
     slotIdx: number;
   } | null>(null);
+
+  const [calendarContextMenu, setCalendarContextMenu] = useState<{
+    x: number;
+    y: number;
+    agentId: string;
+    dateStr: string;
+  } | null>(null);
+
+  const handleSetCalendarDaySchedule = (agentId: string, dateStr: string, code: string) => {
+    setGeneratedRoster(prev => prev.map(r => {
+      if (String(r.empId).trim().toLowerCase() === String(agentId).trim().toLowerCase()) {
+        return {
+          ...r,
+          roster: {
+            ...r.roster,
+            [dateStr]: code
+          }
+        };
+      }
+      return r;
+    }));
+    setCalendarContextMenu(null);
+    showNotification(`Jadwal tanggal ${dateStr} diatur ke ${code}! 🗓️`, "success");
+  };
+
+  const handleOpenDurationModalByActivity = (agentId: string, slotIdx: number, activityCode: string) => {
+    const projKey = (selectedProject && selectedProject !== "all") ? selectedProject : "Project Alpha";
+    const activitySetting = settings.activities?.[projKey]?.[activityCode];
+    const settingDur = activitySetting?.duration;
+    let initialSlots = 2; // default 30 mins
+    if (settingDur === '1') initialSlots = 1;
+    else if (settingDur === '2') initialSlots = 2;
+    else if (settingDur === '4') initialSlots = 4;
+    else if (settingDur === 'full') {
+      const targetAgent = combinedAgents.find(a => a.id === agentId);
+      if (targetAgent) {
+        const rosterEntry = generatedRoster.find(r => r.empId === targetAgent.id);
+        const shiftCode = rosterEntry ? rosterEntry.roster[selectedDate] : targetAgent.shift;
+        if (shiftCode && shiftCode !== "OFF") {
+          const s = resolvedShifts[shiftCode] || Object.values(resolvedShifts)[0];
+          if (s) {
+            let endIdx = timeToIndex(s.end);
+            if (endIdx <= timeToIndex(s.start)) endIdx = 96;
+            const remaining = endIdx - slotIdx;
+            initialSlots = remaining > 0 ? remaining : 1;
+          }
+        }
+      }
+    }
+    setCustomSlots(initialSlots);
+    setDurationModalData({ agentId, slotIdx, activityCode });
+    setCellContextMenu(null);
+  };
 
   const handleSetCellActivity = (agentId: string, slotIdx: number, activityCode: string | null) => {
     setAgentActivities(prev => {
@@ -549,6 +610,29 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
         : "Activity successfully deleted! 🗑️", 
       "success"
     );
+  };
+
+  const handleApplyActivityWithDuration = (agentId: string, startSlotIdx: number, activityCode: string, durationInSlots: number) => {
+    setAgentActivities(prev => {
+      const nextProj = { ...prev[selectedProject] };
+      const nextDate = { ...nextProj[selectedDate] };
+      const agentActs = { ...(nextDate[agentId] || {}) };
+      
+      for (let i = startSlotIdx; i < Math.min(startSlotIdx + durationInSlots, 96); i++) {
+        agentActs[i] = activityCode;
+      }
+      
+      nextDate[agentId] = agentActs;
+      nextProj[selectedDate] = nextDate;
+      
+      return {
+        ...prev,
+        [selectedProject]: nextProj
+      };
+    });
+    setDurationModalData(null);
+    const actName = getActivityDef(activityCode, selectedProject)?.label || activityCode;
+    showNotification(`Activity ${actName} successfully scheduled for ${durationInSlots * 15} minutes! ⏱️`, "success");
   };
 
   const handleBulkClearBreaks = (startStr: string, endStr: string, targetType: "all" | "filtered", filteredAgentsToClear: any[]) => {
@@ -1749,8 +1833,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                       {[
                         { label: "Swap Shift", icon: History, onClick: () => showNotification("Fitur Swap Shift segera hadir! 🔄", "info") },
                         { label: "Approval", icon: ShieldCheck, onClick: () => showNotification("Fitur Persetujuan/Approval segera hadir! 🛡️", "info") },
-                        { label: "Auto Break", icon: Coffee, onClick: () => { handleAutoBreak(); setShowActions(false); } },
-                        { label: "Remove Break (Bulk)", icon: Trash2, onClick: () => { setBulkRemoveStart(selectedDate); setBulkRemoveEnd(selectedDate); setShowBulkRemoveModal(true); setShowActions(false); } },
+                        { label: "Manage Breaks", icon: Coffee, onClick: () => { setBulkRemoveStart(selectedDate); setBulkRemoveEnd(selectedDate); setBreakModalTab('auto'); setShowBulkRemoveModal(true); setShowActions(false); } },
                         { label: "Download", icon: Download, onClick: () => showNotification("Mengunduh laporan... 💾", "info") },
                       ].map((item, i) => (
                         <button 
@@ -2013,7 +2096,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
         </div>
       </div>
 
-      {/* Bulk Remove Breaks Modal */}
+      {/* Bulk Remove / Auto Break Manager Modal */}
       <AnimatePresence>
         {showBulkRemoveModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
@@ -2032,81 +2115,155 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 15 }}
               transition={{ type: "spring", duration: 0.4 }}
-              className="bg-white rounded-3xl shadow-2xl border border-gray-100 p-6 md:p-8 w-full max-w-md relative z-10 flex flex-col gap-6 animate-in fade-in zoom-in-95 duration-200"
+              className="bg-white rounded-3xl shadow-2xl border border-gray-100 p-6 md:p-8 w-full max-w-md relative z-10 flex flex-col gap-5 animate-in fade-in zoom-in-95 duration-200"
             >
               <div>
                 <h3 className="text-sm font-black text-black uppercase tracking-widest flex items-center gap-2.5">
-                  <Trash2 size={18} className="text-rose-600 animate-pulse" />
-                  BULK REMOVE BREAKS
+                  <Coffee size={18} className="text-rose-600 animate-pulse" />
+                  BREAK MANAGER
                 </h3>
                 <p className="text-gray-400 text-[10px] font-bold uppercase tracking-wider mt-1.5 leading-relaxed">
-                  Hapus semua break/aktivitas custom dalam rentang tanggal untuk project <span className="text-rose-600 font-extrabold">"{selectedProject}"</span>.
+                  Kelola penjadwalan istirahat otomatis (Auto Break) & pembersihan massal untuk project <span className="text-rose-600 font-extrabold">"{selectedProject}"</span>.
                 </p>
               </div>
 
-              <div className="space-y-4">
-                {/* Start Date */}
-                <div className="space-y-1.5 font-sans">
-                  <label className="text-[9px] font-black text-neutral-gray uppercase tracking-widest block">Tanggal Mulai</label>
-                  <input 
-                    type="date" 
-                    value={bulkRemoveStart} 
-                    onChange={e => setBulkRemoveStart(e.target.value)} 
-                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-1 focus:ring-rose-500 font-mono"
-                  />
-                </div>
+              {/* Tab Selector */}
+              <div className="flex bg-slate-100 p-1 rounded-xl font-sans">
+                <button
+                  type="button"
+                  onClick={() => setBreakModalTab('auto')}
+                  className={`flex-1 py-2.5 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${breakModalTab === 'auto' ? 'bg-white text-slate-900 shadow-sm font-black' : 'text-slate-400 hover:text-slate-700'}`}
+                >
+                  <Coffee size={12} />
+                  Auto Break
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBreakModalTab('remove')}
+                  className={`flex-1 py-2.5 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${breakModalTab === 'remove' ? 'bg-white text-slate-900 shadow-sm font-black' : 'text-slate-400 hover:text-slate-700'}`}
+                >
+                  <Trash2 size={12} />
+                  Hapus Istirahat
+                </button>
+              </div>
 
-                {/* End Date */}
-                <div className="space-y-1.5 font-sans">
-                  <label className="text-[9px] font-black text-neutral-gray uppercase tracking-widest block">Tanggal Selesai</label>
-                  <input 
-                    type="date" 
-                    value={bulkRemoveEnd} 
-                    onChange={e => setBulkRemoveEnd(e.target.value)} 
-                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-1 focus:ring-rose-500 font-mono"
-                  />
-                </div>
+              {breakModalTab === 'auto' && (
+                <div className="space-y-4 animate-in fade-in duration-200">
+                  <div className="bg-amber-50 border border-amber-100 p-4 rounded-2xl flex items-start gap-3">
+                    <Coffee size={18} className="text-amber-600 mt-0.5 shrink-0" />
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-wider text-amber-900">Penjelasan Auto Break</p>
+                      <p className="text-[9px] text-amber-700 font-bold uppercase mt-1 leading-normal font-sans">
+                        Sistem akan menganalisis data shift agent aktif pada tanggal terpilih (<span className="text-slate-950 font-black">{selectedDate}</span>) dan secara otomatis menempatkan 4 slot istirahat (LB - 1 jam) per agent di waktu terbaik demi kelancaran operasional.
+                      </p>
+                    </div>
+                  </div>
 
-                {/* Target selection */}
-                <div className="space-y-1.5 font-sans">
-                  <label className="text-[9px] font-black text-neutral-gray uppercase tracking-widest block">Target Agent</label>
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2 text-[9px] font-bold uppercase tracking-wider text-slate-500 font-sans">
+                    <div className="flex justify-between">
+                      <span>Project:</span>
+                      <span className="text-slate-900 font-black">{selectedProject}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Tanggal Terpilih:</span>
+                      <span className="text-slate-900 font-black">{selectedDate}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Agent Terdampak:</span>
+                      <span className="text-rose-600 font-black">{filteredAgents.length} Agent</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3 pt-2 font-sans">
                     <button
                       type="button"
-                      onClick={() => setBulkRemoveTarget("all")}
-                      className={`py-2.5 px-3 text-[9px] font-black uppercase tracking-wider rounded-xl transition-all border ${bulkRemoveTarget === "all" ? "bg-black text-white border-black" : "bg-slate-50 text-slate-500 border-slate-100 hover:bg-slate-100"}`}
+                      onClick={() => setShowBulkRemoveModal(false)}
+                      className="flex-1 py-3 border border-slate-200 hover:bg-slate-50 text-slate-500 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors flex items-center justify-center gap-2"
                     >
-                      Semua Agent ({combinedAgents.filter(a => matchProject(a.project, selectedProject)).length})
+                      Batal
                     </button>
                     <button
                       type="button"
-                      onClick={() => setBulkRemoveTarget("filtered")}
-                      className={`py-2.5 px-3 text-[9px] font-black uppercase tracking-wider rounded-xl transition-all border ${bulkRemoveTarget === "filtered" ? "bg-black text-white border-black" : "bg-slate-50 text-slate-500 border-slate-100 hover:bg-slate-100"}`}
+                      onClick={() => {
+                        handleAutoBreak();
+                        setShowBulkRemoveModal(false);
+                      }}
+                      className="flex-1 py-3 bg-slate-950 hover:bg-black text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg shadow-slate-200"
                     >
-                      Agent Filter ({filteredAgents.length})
+                      <Coffee size={13} />
+                      Jadwalkan Otomatis
                     </button>
                   </div>
                 </div>
-              </div>
+              )}
 
-              {/* Confirm Buttons */}
-              <div className="flex items-center gap-3 pt-2 font-sans">
-                <button
-                  type="button"
-                  onClick={() => setShowBulkRemoveModal(false)}
-                  className="flex-1 py-3 border border-slate-200 hover:bg-slate-50 text-slate-500 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors flex items-center justify-center gap-2"
-                >
-                  Batal
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleBulkClearBreaks(bulkRemoveStart, bulkRemoveEnd, bulkRemoveTarget, filteredAgents)}
-                  className="flex-1 py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg shadow-rose-100"
-                >
-                  <Trash2 size={13} />
-                  Hapus
-                </button>
-              </div>
+              {breakModalTab === 'remove' && (
+                <div className="space-y-4 animate-in fade-in duration-200">
+                  <div className="space-y-4">
+                    {/* Start Date */}
+                    <div className="space-y-1.5 font-sans">
+                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block">Tanggal Mulai</label>
+                      <input 
+                        type="date" 
+                        value={bulkRemoveStart} 
+                        onChange={e => setBulkRemoveStart(e.target.value)} 
+                        className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-1 focus:ring-rose-500 font-mono"
+                      />
+                    </div>
+
+                    {/* End Date */}
+                    <div className="space-y-1.5 font-sans">
+                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block">Tanggal Selesai</label>
+                      <input 
+                        type="date" 
+                        value={bulkRemoveEnd} 
+                        onChange={e => setBulkRemoveEnd(e.target.value)} 
+                        className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-1 focus:ring-rose-500 font-mono"
+                      />
+                    </div>
+
+                    {/* Target selection */}
+                    <div className="space-y-1.5 font-sans">
+                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block">Target Agent</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setBulkRemoveTarget("all")}
+                          className={`py-2.5 px-3 text-[9px] font-black uppercase tracking-wider rounded-xl transition-all border ${bulkRemoveTarget === "all" ? "bg-black text-white border-black" : "bg-slate-50 text-slate-500 border-slate-100 hover:bg-slate-100"}`}
+                        >
+                          Semua Agent ({combinedAgents.filter(a => matchProject(a.project, selectedProject)).length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setBulkRemoveTarget("filtered")}
+                          className={`py-2.5 px-3 text-[9px] font-black uppercase tracking-wider rounded-xl transition-all border ${bulkRemoveTarget === "filtered" ? "bg-black text-white border-black" : "bg-slate-50 text-slate-500 border-slate-100 hover:bg-slate-100"}`}
+                        >
+                          Agent Filter ({filteredAgents.length})
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Confirm Buttons */}
+                  <div className="flex items-center gap-3 pt-2 font-sans">
+                    <button
+                      type="button"
+                      onClick={() => setShowBulkRemoveModal(false)}
+                      className="flex-1 py-3 border border-slate-200 hover:bg-slate-50 text-slate-500 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors flex items-center justify-center gap-2"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleBulkClearBreaks(bulkRemoveStart, bulkRemoveEnd, bulkRemoveTarget, filteredAgents)}
+                      className="flex-1 py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg shadow-rose-100"
+                    >
+                      <Trash2 size={13} />
+                      Hapus Istirahat
+                    </button>
+                  </div>
+                </div>
+              )}
             </motion.div>
           </div>
         )}
@@ -2149,7 +2306,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                     <button
                       key={key}
                       type="button"
-                      onClick={() => handleSetCellActivity(cellContextMenu.agentId, cellContextMenu.slotIdx, key)}
+                      onClick={() => handleOpenDurationModalByActivity(cellContextMenu.agentId, cellContextMenu.slotIdx, key)}
                       className="w-full text-left px-3 py-2 rounded-xl hover:bg-slate-50 transition-colors flex items-center justify-between gap-3 text-slate-700 font-bold uppercase tracking-wider"
                     >
                       <span className="flex items-center gap-2">
@@ -2186,6 +2343,171 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
           </div>
         </>
       )}
+
+      {/* Custom Duration Selection Modal */}
+      <AnimatePresence>
+        {durationModalData && (
+          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setDurationModalData(null)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-md"
+            />
+            
+            {/* Modal Content */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              transition={{ type: "spring", duration: 0.4 }}
+              className="bg-white rounded-3xl shadow-2xl border border-gray-100 p-6 md:p-8 w-full max-w-md relative z-10 flex flex-col gap-5 animate-in fade-in zoom-in-95 duration-200"
+            >
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className={`w-3 h-3 rounded-full ${getActivityDef(durationModalData.activityCode, selectedProject)?.color} inline-block shadow-sm animate-pulse`} />
+                  <span className="text-[10px] font-black uppercase text-rose-600 tracking-widest font-sans">
+                    Atur Durasi Aktivitas
+                  </span>
+                </div>
+                <h3 className="text-base font-black text-black uppercase tracking-wider font-sans mt-0.5">
+                  {getActivityDef(durationModalData.activityCode, selectedProject)?.label} ({durationModalData.activityCode})
+                </h3>
+                <p className="text-gray-400 text-[10px] font-bold uppercase tracking-wider mt-1 leading-relaxed">
+                  Pilih durasi aktivitas yang ingin dijadwalkan dari waktu mulai <span className="text-slate-900 font-extrabold">{intervals[durationModalData.slotIdx]}</span>.
+                </p>
+              </div>
+
+              {/* Settings Info Banner */}
+              {(() => {
+                const projKey = (selectedProject && selectedProject !== "all") ? selectedProject : "Project Alpha";
+                const activitySetting = settings.activities?.[projKey]?.[durationModalData.activityCode];
+                if (!activitySetting) return null;
+                
+                let durText = "15 Menit (1 Slot)";
+                if (activitySetting.duration === '2') durText = "30 Menit (2 Slot)";
+                if (activitySetting.duration === '4') durText = "1 Jam (4 Slot)";
+                if (activitySetting.duration === 'full') durText = "Full Day / Sisa Shift";
+                if (activitySetting.duration === 'custom') durText = "Kustom / Manual";
+
+                return (
+                  <div className="bg-slate-50 border border-slate-100 p-3.5 rounded-2xl flex items-center justify-between font-sans">
+                    <span className="text-[9px] font-black uppercase text-slate-500 tracking-wider">Durasi Default Project:</span>
+                    <span className="text-[9px] font-black uppercase text-rose-600 bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-100">
+                      {durText}
+                    </span>
+                  </div>
+                );
+              })()}
+
+              {/* Presets Grid */}
+              <div className="space-y-2">
+                <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1">Daftar Pilihan Cepat</label>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 font-sans">
+                  {[
+                    { label: "15 Menit", slots: 1 },
+                    { label: "30 Menit", slots: 2 },
+                    { label: "45 Menit", slots: 3 },
+                    { label: "1 Jam", slots: 4 },
+                    { label: "2 Jam", slots: 8 },
+                    { 
+                      label: "Sisa Shift", 
+                      slots: (() => {
+                        const targetAgent = combinedAgents.find(a => a.id === durationModalData.agentId);
+                        if (targetAgent) {
+                          const rosterEntry = generatedRoster.find(r => r.empId === targetAgent.id);
+                          const shiftCode = rosterEntry ? rosterEntry.roster[selectedDate] : targetAgent.shift;
+                          if (shiftCode && shiftCode !== "OFF") {
+                            const s = resolvedShifts[shiftCode] || Object.values(resolvedShifts)[0];
+                            if (s) {
+                              let endIdx = timeToIndex(s.end);
+                              if (endIdx <= timeToIndex(s.start)) endIdx = 96;
+                              const rem = endIdx - durationModalData.slotIdx;
+                              return rem > 0 ? rem : 1;
+                            }
+                          }
+                        }
+                        return 4; // fallback
+                      })() 
+                    }
+                  ].map((preset) => {
+                    const isSelected = customSlots === preset.slots;
+                    return (
+                      <button
+                        key={preset.label}
+                        type="button"
+                        onClick={() => setCustomSlots(preset.slots)}
+                        className={`py-2 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all border text-center ${
+                          isSelected 
+                            ? "bg-black text-white border-black shadow-md scale-102" 
+                            : "bg-slate-50 text-slate-500 border-slate-100 hover:bg-slate-100 hover:text-slate-900"
+                        }`}
+                      >
+                        {preset.label}
+                        <span className="block text-[7px] opacity-65 font-mono">({preset.slots} slot)</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Adjuster / Number Input */}
+              <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center justify-between font-sans">
+                <div>
+                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block font-sans">Atur Manual</label>
+                  <span className="text-[11px] font-black text-black block mt-0.5 uppercase">
+                    Total: {customSlots * 15} Menit
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCustomSlots(prev => Math.max(1, prev - 1))}
+                    className="w-8 h-8 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 font-extrabold flex items-center justify-center transition-all cursor-pointer shadow-sm text-sm"
+                  >
+                    -
+                  </button>
+                  <span className="w-10 text-center font-black text-xs font-mono">
+                    {customSlots}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCustomSlots(prev => Math.min(96 - durationModalData.slotIdx, prev + 1))}
+                    className="w-8 h-8 rounded-xl bg-white border border-slate-200 hover:bg-slate-50 text-slate-600 font-extrabold flex items-center justify-center transition-all cursor-pointer shadow-sm text-sm"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-3 pt-2 font-sans">
+                <button
+                  type="button"
+                  onClick={() => setDurationModalData(null)}
+                  className="flex-1 py-3 border border-slate-200 hover:bg-slate-50 text-slate-500 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors flex items-center justify-center"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleApplyActivityWithDuration(
+                    durationModalData.agentId,
+                    durationModalData.slotIdx,
+                    durationModalData.activityCode,
+                    customSlots
+                  )}
+                  className="flex-1 py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg shadow-rose-100"
+                >
+                  Simpan Aktivitas
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
@@ -4197,7 +4519,8 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                             tdBgClass = 'bg-rose-50/15';
                           }
 
-                          const shiftInfo = (Object.keys(dbShifts).length > 0 ? dbShifts : SHIFTS)[shiftCode] || { color: 'bg-slate-200' };
+                          const shiftInfo = (Object.keys(dbShifts).length > 0 ? dbShifts : SHIFTS)[shiftCode];
+                          const resolvedColor = shiftInfo?.color || getActivityDef(shiftCode, agent.project)?.color || 'bg-slate-500';
                           const holidayTooltip = isHoliday 
                             ? `${holidayType === 'cuti' ? '☀️ Cuti Bersama' : '🚨 Public Holiday'}: ${holidayDesc}` 
                             : isWeekend ? 'Weekend' : '';
@@ -4206,7 +4529,16 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                             <td 
                               key={i} 
                               title={holidayTooltip}
-                              className={`p-1 border-r border-gray-50/50 text-center relative w-[65px] min-w-[65px] max-w-[65px] transition-colors ${tdBgClass}`}
+                              className={`p-1 border-r border-gray-50/50 text-center relative w-[65px] min-w-[65px] max-w-[65px] transition-colors ${tdBgClass} select-none`}
+                              onContextMenu={(e) => {
+                                e.preventDefault();
+                                setCalendarContextMenu({
+                                  x: e.clientX,
+                                  y: e.clientY,
+                                  agentId: agent.id,
+                                  dateStr: d
+                                });
+                              }}
                             >
                               <div 
                                 className={`mx-auto w-[48px] py-2 rounded-xl text-[10px] font-black transition-all hover:scale-105 cursor-pointer flex items-center justify-center
@@ -4216,7 +4548,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                                             ? 'text-amber-800 bg-amber-100 border border-amber-300 font-extrabold shadow-none' 
                                             : 'text-rose-800 bg-rose-100 border border-rose-300 font-extrabold shadow-none') 
                                         : 'text-slate-400 bg-slate-100 inset-shadow-sm shadow-none opacity-60') 
-                                    : 'text-white shadow-sm ' + shiftInfo?.color}`}
+                                    : 'text-white shadow-sm ' + resolvedColor}`}
                               >
                                 {shiftCode.toUpperCase()}
                               </div>
@@ -6210,6 +6542,91 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
           )}
         </motion.div>
       </AnimatePresence>
+
+      {/* Context Menu Popup for Calendar */}
+      {calendarContextMenu && (
+        <>
+          <div 
+            className="fixed inset-0 z-[1000] bg-transparent" 
+            onClick={() => setCalendarContextMenu(null)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setCalendarContextMenu(null);
+            }}
+          />
+          
+          <div 
+            className="fixed z-[1001] bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 min-w-[170px] flex flex-col gap-1 text-[10px] font-sans"
+            style={{ 
+              top: `${Math.min(calendarContextMenu.y, (typeof window !== "undefined" ? window.innerHeight : 1000) - 250)}px`, 
+              left: `${Math.min(calendarContextMenu.x, (typeof window !== "undefined" ? window.innerWidth : 1000) - 180)}px`
+            }}
+          >
+            <div className="px-3 py-1.5 text-gray-400 font-extrabold text-[9px] tracking-widest border-b border-gray-100 uppercase">
+              Jadwal: {format(parseISO(calendarContextMenu.dateStr), 'dd MMM yyyy')}
+            </div>
+            
+            <div className="flex flex-col gap-0.5 max-h-[220px] overflow-y-auto mt-1">
+              {(() => {
+                const combinedShifts = { ...SHIFTS, ...dbShifts };
+                const projKey = (selectedProject && selectedProject !== "all") ? selectedProject : "Project Alpha";
+                const projActs = settings.activities?.[projKey] || ACTIVITY_TYPES;
+
+                return (
+                  <>
+                    <div className="px-3 py-1 mt-1 text-[8px] font-black tracking-widest text-slate-300 uppercase">Shift Master</div>
+                    {Object.keys(combinedShifts).map((code) => {
+                      const s = combinedShifts[code];
+                      return (
+                        <button
+                          key={code}
+                          type="button"
+                          onClick={() => handleSetCalendarDaySchedule(calendarContextMenu.agentId, calendarContextMenu.dateStr, code)}
+                          className="w-full text-left px-3 py-2 rounded-xl hover:bg-slate-50 transition-colors flex items-center justify-between gap-3 text-slate-700 font-bold uppercase tracking-wider"
+                        >
+                          <span className="flex items-center gap-2">
+                            <span className={`w-2 h-2 rounded-full ${s.color || 'bg-slate-500'} inline-block`} />
+                            {s.label || code}
+                          </span>
+                          <span className="text-[8px] font-black text-slate-400 font-mono tracking-wider">{code}</span>
+                        </button>
+                      );
+                    })}
+
+                    <div className="px-3 py-1 mt-2 text-[8px] font-black tracking-widest text-slate-300 uppercase border-t border-gray-50 pt-2">Activities</div>
+                    {Object.keys(projActs).map((code) => {
+                      const act = projActs[code];
+                      return (
+                        <button
+                          key={code}
+                          type="button"
+                          onClick={() => handleSetCalendarDaySchedule(calendarContextMenu.agentId, calendarContextMenu.dateStr, code)}
+                          className="w-full text-left px-3 py-2 rounded-xl hover:bg-slate-50 transition-colors flex items-center justify-between gap-3 text-slate-700 font-bold uppercase tracking-wider"
+                        >
+                          <span className="flex items-center gap-2">
+                            <span className={`w-2 h-2 rounded-full ${act.color || 'bg-slate-500'} inline-block`} />
+                            {act.label || code}
+                          </span>
+                          <span className="text-[8px] font-black text-slate-400 font-mono tracking-wider">{code}</span>
+                        </button>
+                      );
+                    })}
+                  </>
+                );
+              })()}
+              
+              <button
+                type="button"
+                onClick={() => handleSetCalendarDaySchedule(calendarContextMenu.agentId, calendarContextMenu.dateStr, "OFF")}
+                className="w-full text-left px-3 py-2 rounded-xl hover:bg-rose-50 text-rose-600 transition-colors flex items-center gap-2 border-t border-gray-100 mt-2 font-bold uppercase tracking-wider"
+              >
+                <Trash2 size={12} className="text-rose-500 shrink-0" />
+                Set Libur (OFF)
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
