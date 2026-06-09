@@ -419,6 +419,9 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
 
   // Roles State
   const [roles, setRoles] = useState(settings.roles);
+  const [selectedRoleForEdit, setSelectedRoleForEdit] = useState<string>('Admin');
+  const [newRoleName, setNewRoleName] = useState('');
+  const [newActivityTag, setNewActivityTag] = useState('');
 
   // Activities State
   const [selectedActivityProject, setSelectedActivityProject] = useState("Project Alpha");
@@ -1470,34 +1473,318 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
               </div>
             )}
 
-            {activeTab === 'roles' && (
-              <div className="animate-in fade-in slide-in-from-top-4 duration-300">
-                <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-200 shadow-sm mb-10 max-w-4xl mx-auto">
-                   <h4 className="m-0 mb-3 text-slate-900 text-base font-black flex items-center gap-2.5 tracking-widest uppercase"><ShieldCheck size={18} className="text-rose-600" /> INFRASTRUCTURE ACCESS ROLES</h4>
-                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Modify permission kernels for system entities</p>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                  {Object.keys(roles).map(roleName => (
-                    <div key={roleName} className="bg-white border border-slate-200 rounded-[2.5rem] shadow-xl flex flex-col overflow-hidden">
-                      <div className="bg-slate-100 p-6 border-b border-slate-200 font-black text-[10px] uppercase tracking-[0.2em] text-slate-900 text-center">{roleName}</div>
-                      <div className="p-8 space-y-4">
-                        {['isAdmin', 'canEditSchedule', 'canSeeAll', 'canSwap'].map(perm => (
-                          <label key={perm} className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl cursor-pointer group hover:bg-slate-100 transition-colors">
-                            <span className="text-[10px] font-black uppercase tracking-widest text-slate-600 group-hover:text-slate-900">{perm}</span>
-                            <input 
-                              type="checkbox" 
-                              checked={roles[roleName][perm] || false} 
-                              onChange={() => toggleRolePermission(roleName, perm)} 
-                              className="w-4 h-4 text-rose-600 rounded border-slate-300 focus:ring-rose-500"
-                            />
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+             {activeTab === 'roles' && (() => {
+               // Fallback if selectedRoleForEdit was deleted or is not set
+               const roleKeys = Object.keys(roles);
+               const activeRoleKey = roleKeys.includes(selectedRoleForEdit) ? selectedRoleForEdit : (roleKeys[0] || 'Admin');
+               const activeRoleData = roles[activeRoleKey] || {
+                 isAdmin: false,
+                 canEditSchedule: false,
+                 canSeeAll: false,
+                 canSwap: false,
+                 allowedUI: [],
+                 allowedActivities: []
+               };
+
+               const isDefaultRole = ['Admin', 'Manager', 'Agent'].includes(activeRoleKey);
+
+               const handleAddCustomRole = () => {
+                 if (!newRoleName.trim()) {
+                   alert("Please enter a role name!");
+                   return;
+                 }
+                 const cleanName = newRoleName.trim();
+                 if (roles[cleanName]) {
+                   alert("A role with this name already exists!");
+                   return;
+                 }
+                 setRoles((prev: any) => ({
+                   ...prev,
+                   [cleanName]: {
+                     isAdmin: false,
+                     canEditSchedule: false,
+                     canSeeAll: false,
+                     canSwap: true,
+                     allowedUI: ['viewInt', 'viewCal'],
+                     allowedActivities: []
+                   }
+                 }));
+                 setSelectedRoleForEdit(cleanName);
+                 setNewRoleName('');
+                 showStatus(`Custom role "${cleanName}" created! Click 'Update Permissions' to save permanently.`);
+               };
+
+               const handleDeleteCustomRole = (roleToDelete: string) => {
+                 if (isDefaultRole) {
+                   alert("Default system roles cannot be deleted.");
+                   return;
+                 }
+                 if (window.confirm(`Are you sure you want to delete the role "${roleToDelete}"?`)) {
+                   setRoles((prev: any) => {
+                     const copy = { ...prev };
+                     delete copy[roleToDelete];
+                     return copy;
+                   });
+                   setSelectedRoleForEdit('Admin');
+                   showStatus(`Role "${roleToDelete}" deleted. Click 'Update Permissions' to save permanently.`);
+                 }
+               };
+
+               const handleToggleRolePermission = (permName: string) => {
+                 setRoles((prev: any) => ({
+                   ...prev,
+                   [activeRoleKey]: {
+                     ...prev[activeRoleKey],
+                     [permName]: !prev[activeRoleKey][permName]
+                   }
+                 }));
+               };
+
+               const handleToggleRoleUI = (uiCode: string) => {
+                 setRoles((prev: any) => {
+                   const allowedUI = prev[activeRoleKey].allowedUI || [];
+                   const newAllowedUI = allowedUI.includes(uiCode)
+                     ? allowedUI.filter((c: string) => c !== uiCode)
+                     : [...allowedUI, uiCode];
+                   return {
+                     ...prev,
+                     [activeRoleKey]: {
+                       ...prev[activeRoleKey],
+                       allowedUI: newAllowedUI
+                     }
+                   };
+                 });
+               };
+
+               const handleAddActivityTag = () => {
+                 if (!newActivityTag.trim()) return;
+                 const cleanTag = newActivityTag.trim().toUpperCase();
+                 const currentTags = activeRoleData.allowedActivities || [];
+                 if (currentTags.includes(cleanTag)) {
+                   alert("This activity tag is already permitted!");
+                   return;
+                 }
+                 setRoles((prev: any) => ({
+                   ...prev,
+                   [activeRoleKey]: {
+                     ...prev[activeRoleKey],
+                     allowedActivities: [...currentTags, cleanTag]
+                   }
+                 }));
+                 setNewActivityTag('');
+               };
+
+               const handleRemoveActivityTag = (tagToRemove: string) => {
+                 setRoles((prev: any) => ({
+                   ...prev,
+                   [activeRoleKey]: {
+                     ...prev[activeRoleKey],
+                     allowedActivities: (prev[activeRoleKey].allowedActivities || []).filter((t: string) => t !== tagToRemove)
+                   }
+                 }));
+               };
+
+               return (
+                 <div className="animate-in fade-in slide-in-from-top-4 duration-300 max-w-6xl mx-auto space-y-10">
+                   {/* Header panel */}
+                   <div className="bg-slate-50 p-6 md:p-8 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                     <div>
+                       <h4 className="m-0 font-black text-slate-950 text-base uppercase tracking-widest flex items-center gap-2.5">
+                         <ShieldCheck size={18} className="text-rose-600 animate-pulse" /> ACCESS & ROLE SETTINGS
+                       </h4>
+                       <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight mt-1.5 px-7">
+                         Modify permission kernels, feature rights, and activity allowances for workforce entities
+                       </p>
+                     </div>
+                   </div>
+
+                   <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+                     {/* Left panel: Roles List */}
+                     <div className="lg:col-span-1 space-y-6">
+                       <div className="bg-white p-6 rounded-[2rem] border border-slate-200 shadow-sm space-y-4">
+                         <span className="text-[9px] font-black text-rose-600 uppercase tracking-widest px-1 block font-sans">Role Registry</span>
+                         <div className="space-y-2">
+                           {roleKeys.map(role => {
+                             const isActive = role === activeRoleKey;
+                             return (
+                               <button
+                                 key={role}
+                                 onClick={() => setSelectedRoleForEdit(role)}
+                                 className={`w-full p-3 px-4 rounded-xl text-[10px] font-black uppercase tracking-wider text-left transition-all flex items-center justify-between ${
+                                   isActive 
+                                     ? 'bg-slate-950 text-white shadow-md scale-[1.02]' 
+                                     : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                                 }`}
+                               >
+                                 <span className="truncate">{role}</span>
+                                 {!['Admin', 'Manager', 'Agent'].includes(role) && (
+                                   <span className="text-[8px] bg-rose-500 text-white px-1.5 py-0.5 rounded uppercase font-bold ml-1">Custom</span>
+                                 )}
+                               </button>
+                             );
+                           })}
+                         </div>
+
+                         {/* Add custom role input */}
+                         <div className="pt-4 border-t border-slate-100 space-y-2">
+                           <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest px-1 block font-sans">Create Custom Role</span>
+                           <input
+                             type="text"
+                             value={newRoleName}
+                             onChange={e => setNewRoleName(e.target.value)}
+                             placeholder="e.g., Supervisor"
+                             className="w-full p-2.5 px-3 bg-slate-50 border border-slate-200 rounded-xl text-[10px] font-bold uppercase tracking-wider outline-none focus:border-rose-500 font-mono"
+                           />
+                           <button
+                             onClick={handleAddCustomRole}
+                             className="w-full p-2.5 bg-rose-600 hover:bg-rose-700 text-white font-black text-[9px] uppercase tracking-widest rounded-xl transition-all shadow-sm flex items-center justify-center gap-1.5"
+                           >
+                             <Plus size={12} /> Add Custom Role
+                           </button>
+                         </div>
+                       </div>
+                     </div>
+
+                     {/* Right panel: Details of selected role */}
+                     <div className="lg:col-span-3">
+                       <div className="bg-white p-6 md:p-8 rounded-[2.5rem] border border-slate-200 shadow-lg space-y-8">
+                         {/* Header inside detail area */}
+                         <div className="flex justify-between items-center border-b border-slate-100 pb-5">
+                           <div>
+                             <h4 className="text-sm font-black text-slate-950 uppercase tracking-widest flex items-center gap-2 font-mono">
+                               🛡️ {activeRoleKey} ROLE DETAILS
+                             </h4>
+                             <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1 font-sans">
+                               {isDefaultRole ? "System Reserved Default Access Role" : "User-Defined Custom Security Profile"}
+                             </p>
+                           </div>
+                           {!isDefaultRole && (
+                             <button
+                               onClick={() => handleDeleteCustomRole(activeRoleKey)}
+                               className="px-3.5 py-2 bg-rose-50 text-rose-600 hover:bg-rose-100 rounded-xl text-[9px] font-black uppercase tracking-wider flex items-center gap-1.5 transition-all"
+                             >
+                               <Trash2 size={12} /> Delete Role
+                             </button>
+                           )}
+                         </div>
+
+                         {/* Section 1: Kernels / Capabilities */}
+                         <div className="space-y-4">
+                           <h5 className="text-[9px] font-black text-rose-600 uppercase tracking-widest px-1 font-sans">
+                             Core Permission Kernels / General Capabilities
+                           </h5>
+                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                             {[
+                               { id: 'isAdmin', label: 'System Admin Mode', desc: 'Grants master permissions override across all infrastructure logs and setups' },
+                               { id: 'canEditSchedule', label: 'Manage & Generate Schedules', desc: 'Allows generation, modification, and bulk updates of roster schedules' },
+                               { id: 'canSeeAll', label: 'Global Data Visibility', desc: 'Permits viewing operational KPIs, financial models, and cross-project metrics' },
+                               { id: 'canSwap', label: 'Schedule Swap Permission', desc: 'Allows submitting and approving shift trade transactions between rosters' },
+                             ].map(item => (
+                               <label
+                                 key={item.id}
+                                 className="flex items-start gap-4 p-4 rounded-2xl border border-slate-100 bg-slate-50 hover:bg-slate-100/50 transition-all cursor-pointer select-none"
+                               >
+                                 <input
+                                   type="checkbox"
+                                   checked={!!activeRoleData[item.id]}
+                                   onChange={() => handleToggleRolePermission(item.id)}
+                                   className="mt-0.5 w-4 h-4 text-rose-600 rounded border-slate-300 focus:ring-rose-500 focus:ring-1"
+                                 />
+                                 <div>
+                                   <p className="text-[10px] font-black uppercase tracking-wider text-slate-900">{item.label}</p>
+                                   <p className="text-[8.5px] text-slate-400 font-bold uppercase mt-1 leading-normal">{item.desc}</p>
+                                 </div>
+                               </label>
+                             ))}
+                           </div>
+                         </div>
+
+                         {/* Section 2: UI Feature Access */}
+                         <div className="space-y-4 pt-4 border-t border-slate-100">
+                           <h5 className="text-[9px] font-black text-rose-600 uppercase tracking-widest px-1 font-sans">
+                             Page View & Active Action Privileges (allowedUI)
+                           </h5>
+                           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                             {uiOptions.map(opt => {
+                               const isChecked = (activeRoleData.allowedUI || []).includes(opt.code);
+                               return (
+                                 <label
+                                   key={opt.code}
+                                   className={`flex items-center justify-between p-3.5 px-4 rounded-xl border transition-all cursor-pointer select-none ${
+                                     isChecked 
+                                       ? 'bg-rose-50/40 border-rose-100/80 text-rose-950 font-black' 
+                                       : 'bg-slate-50/50 border-slate-100 text-slate-500'
+                                   }`}
+                                 >
+                                   <span className="text-[9px] font-black uppercase tracking-wider">{opt.label}</span>
+                                   <input
+                                     type="checkbox"
+                                     checked={isChecked}
+                                     onChange={() => handleToggleRoleUI(opt.code)}
+                                     className="w-3.5 h-3.5 text-rose-600 rounded border-slate-300 focus:ring-rose-500 focus:ring-1"
+                                   />
+                                 </label>
+                               );
+                             })}
+                           </div>
+                         </div>
+
+                         {/* Section 3: Custom allowedActivities tags */}
+                         <div className="space-y-4 pt-4 border-t border-slate-100">
+                           <h5 className="text-[9px] font-black text-rose-600 uppercase tracking-widest px-1 font-sans">
+                             Permitted Administrative Operations (allowedActivities)
+                           </h5>
+                           <p className="text-[8px] text-slate-400 font-bold uppercase tracking-wide leading-relaxed px-1 font-sans">
+                             Specific custom permission hooks assigned to this role. Type a code (e.g. "REMOVE" or "OVERRIDE") and press enter.
+                           </p>
+
+                           <div className="flex flex-wrap gap-2 p-4 bg-slate-50 rounded-2xl border border-slate-100 min-h-[64px] items-center">
+                             {(activeRoleData.allowedActivities || []).length === 0 ? (
+                               <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest italic px-1 font-sans">
+                                 No custom activity permissions mapped to this profile.
+                               </span>
+                             ) : (
+                               (activeRoleData.allowedActivities || []).map(tag => (
+                                 <span
+                                   key={tag}
+                                   className="inline-flex items-center gap-1.5 bg-slate-900 text-white rounded-lg p-1.5 px-3 font-mono text-[9px] font-black uppercase tracking-widest"
+                                 >
+                                   <span>{tag}</span>
+                                   <button
+                                     onClick={() => handleRemoveActivityTag(tag)}
+                                     className="text-slate-400 hover:text-white transition-colors text-xs font-semibold px-0.5"
+                                   >
+                                     &times;
+                                   </button>
+                                 </span>
+                               ))
+                             )}
+                           </div>
+
+                           <div className="flex gap-2.5 max-w-sm">
+                             <input
+                               type="text"
+                               value={newActivityTag}
+                               onChange={e => setNewActivityTag(e.target.value)}
+                               onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddActivityTag(); } }}
+                               placeholder="e.g. REMOVE, OVERRIDE"
+                               className="flex-1 p-3 px-4 bg-slate-50 border border-slate-200 rounded-xl text-xs font-black uppercase tracking-widest outline-none focus:border-rose-500 font-mono"
+                             />
+                             <button
+                               type="button"
+                               onClick={handleAddActivityTag}
+                               className="px-5 bg-rose-600 hover:bg-rose-700 text-white font-black text-[9px] uppercase tracking-widest rounded-xl transition-all shadow-sm flex items-center gap-1"
+                             >
+                               <Plus size={14} /> Add Tag
+                             </button>
+                           </div>
+                         </div>
+                       </div>
+                     </div>
+                   </div>
+                 </div>
+               );
+             })()}
 
             {activeTab === 'holiday' && (
               <div className="animate-in fade-in slide-in-from-top-4 duration-300 max-w-5xl mx-auto">
