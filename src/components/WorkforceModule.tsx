@@ -216,7 +216,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
       nextDate[agentId] = {}; // clear activities
       nextProj[selectedDate] = nextDate;
       
-      showNotification(`Break untuk agent berhasil dihapus! 🗑️`, "success");
+      showNotification(`Break for agent successfully deleted! 🗑️`, "success");
       return {
         ...prev,
         [selectedProject]: nextProj
@@ -256,7 +256,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
       .filter(a => matchProject(a.project, selectedProject));
 
     if (filteredAgents.length === 0) {
-      showNotification("Tidak ada agen yang sesuai filter untuk dijadwalkan break.", "error");
+      showNotification("No agents match the current filter to schedule breaks for.", "error");
       return;
     }
 
@@ -305,34 +305,41 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
     // Running coverage tracks how many working agents currently exist
     const currentCoverage = [...baseCoverage];
 
-    // Map to hold newly assigned breaks on selectedDate
+    // Map to hold newly assigned breaks
     const newAssignedDateBreaks: Record<string, Record<number, string>> = {};
+    const newAssignedNextDateBreaks: Record<string, Record<number, string>> = {};
 
     // Sort agents or process them. Let's process each agent in order.
     filteredAgents.forEach(agent => {
       const shiftInfo = getAgentShiftForDateLocal(agent);
       if (!shiftInfo) {
-        // Agent is OFF, so no breaks needed!
         newAssignedDateBreaks[agent.id] = {};
         return;
       }
 
       const { code: shiftCode, shift: s } = shiftInfo;
-      const shiftStartIdx = timeToIndex(s.start);
+      let shiftStartIdx = timeToIndex(s.start);
       let shiftEndIdx = timeToIndex(s.end);
-      if (shiftEndIdx <= shiftStartIdx) shiftEndIdx = 96;
+      const isOvernight = shiftEndIdx <= shiftStartIdx;
+      if (isOvernight) shiftEndIdx += 96;
 
       // Follow "mengikuti settingan pada auto break"
-      // If custom break options are configured, we retrieve them
       const customOptions = settings.autoBreak?.[shiftCode] || [];
       let candidates: number[] = [];
       if (customOptions.length > 0) {
         candidates = customOptions
-          .map((t: string) => timeToIndex(t))
-          .filter((idx: number) => idx >= shiftStartIdx && idx < shiftEndIdx);
+          .map((t: string) => {
+            const idx = timeToIndex(t);
+            // If overnight shift and the configured break is early in the day, it belongs to the continuation part
+            if (isOvernight && idx < timeToIndex(s.end)) {
+              return idx + 96;
+            }
+            return idx;
+          })
+          .filter((idx: number) => idx >= shiftStartIdx && idx < shiftEndIdx - 3);
       }
 
-      // Fallback candidate break start bounds (middle 50% of the shift) if no options specified
+      // Fallback candidate break start bounds
       if (candidates.length === 0) {
         const totalSlots = shiftEndIdx - shiftStartIdx;
         const startMid = shiftStartIdx + Math.floor(totalSlots * 0.3);
@@ -345,19 +352,19 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
         }
       }
 
-      // Check this agent's break times on OTHER days in current roster period
+      // Check this agent's break times on OTHER days
       const otherDaysBreakStarts: number[] = [];
       days.forEach(day => {
         if (day !== selectedDate) {
           const dayActs = agentActivities[selectedProject]?.[day]?.[agent.id] || {};
           const keys = Object.keys(dayActs).map(Number).sort((a, b) => a - b);
           if (keys.length > 0) {
-            otherDaysBreakStarts.push(keys[0]); // record their earliest break start slot
+            // Un-normalize overnight breaks if needed so distance penalty still roughly works
+            otherDaysBreakStarts.push(keys[0]);
           }
         }
       });
 
-      // Find the best slot based on "coverage gap terbesar hindari gap minus" and other day break penalties
       let bestCandidate = candidates[0];
       let bestScore = -Infinity;
 
@@ -365,33 +372,31 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
         let totalGapSum = 0;
         let penalty = 0;
 
-        // Check each of the 4 slots of this 1-hour break (LB)
         for (let offset = 0; offset < 4; offset++) {
           const sIdx = c + offset;
-          if (sIdx >= 96) continue;
+          const mapIdx = sIdx >= 96 ? sIdx - 96 : sIdx;
 
-          const currentActual = currentCoverage[sIdx];
-          const required = requiredCount[sIdx];
+          const currentActual = currentCoverage[mapIdx] || 0;
+          const required = requiredCount[mapIdx];
           const currentGap = currentActual - required;
 
-          // If allocating this break (taking 1 agent away) drops coverage below requirement (gap minus), penalize heavily!
           if (currentActual - 1 < required) {
-            penalty += 10000; // severe penalty to prevent negative gap
+            penalty += 10000;
           }
 
           totalGapSum += currentGap;
         }
 
-        // Hindari break di jam yang sama untuk agent lain / agent yang sama di hari lain
         otherDaysBreakStarts.forEach(prevStart => {
-          if (c === prevStart) {
-            penalty += 50000; // exact same slot penalty
-          } else if (Math.abs(c - prevStart) < 4) {
-            penalty += 15000; // scheduled in the same hour block penalty
+            // Modulo check since previous starts are stored 0-95
+          const normalizedC = c >= 96 ? c - 96 : c;
+          if (normalizedC === prevStart) {
+            penalty += 50000;
+          } else if (Math.abs(normalizedC - prevStart) < 4) {
+            penalty += 15000;
           }
         });
 
-        // Final candidate score. Higher is better (higher gap, lower penalty)
         const score = totalGapSum - penalty;
         if (score > bestScore) {
           bestScore = score;
@@ -399,18 +404,28 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
         }
       });
 
-      // Assign the 4 slots of break (LB) to the chose best candidate
-      const agentActs: Record<number, string> = {};
-      for (let offset = 0; offset < 4; offset++) {
-        const slot = bestCandidate + offset;
-        if (slot < 96) {
-          agentActs[slot] = "LB";
-          // Subtract from current available coverage so next agents' evaluations take this break into account!
-          currentCoverage[slot]--;
+      if (bestCandidate !== undefined) {
+        const agentActs: Record<number, string> = {};
+        const agentActsNextDay: Record<number, string> = {};
+        for (let offset = 0; offset < 4; offset++) {
+          const slot = bestCandidate + offset;
+          const mapIdx = slot >= 96 ? slot - 96 : slot;
+          currentCoverage[mapIdx]--;
+          
+          if (slot >= 96) {
+             agentActsNextDay[slot - 96] = "LB";
+          } else {
+             agentActs[slot] = "LB";
+          }
+        }
+        
+        if (Object.keys(agentActs).length > 0) {
+          newAssignedDateBreaks[agent.id] = agentActs;
+        }
+        if (Object.keys(agentActsNextDay).length > 0) {
+          newAssignedNextDateBreaks[agent.id] = agentActsNextDay;
         }
       }
-
-      newAssignedDateBreaks[agent.id] = agentActs;
     });
 
     // Save newly calculated custom activities in state
@@ -418,19 +433,44 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
       const nextProj = { ...prev[selectedProject] };
       const nextDate = { ...nextProj[selectedDate], ...newAssignedDateBreaks };
       nextProj[selectedDate] = nextDate;
+      
+      if (Object.keys(newAssignedNextDateBreaks).length > 0) {
+        const nextDateStr = format(addDays(parseISO(selectedDate), 1), "yyyy-MM-dd");
+        const subsequentDate = { ...nextProj[nextDateStr] };
+        for (const [aId, bMap] of Object.entries(newAssignedNextDateBreaks)) {
+            subsequentDate[aId] = { ...subsequentDate[aId], ...bMap };
+        }
+        nextProj[nextDateStr] = subsequentDate;
+      }
+      
       return {
         ...prev,
         [selectedProject]: nextProj
       };
     });
 
-    showNotification("Auto Break berhasil diproses untuk semua agen aktif! ☕", "success");
+     showNotification("Auto Break successfully processed for all active agents! ☕", "success");
   };
   const [dbShifts, setDbShifts] = useState<Record<string, { label: string; start: string; end: string; color: string }>>({});
 
   const resolvedShifts: Record<string, { label: string; start: string; end: string; color: string }> = {
     ...SHIFTS,
     ...dbShifts
+  };
+
+  const isShiftCrossDay = (code: string | null) => {
+    if (!code) return false;
+    const s = resolvedShifts[code];
+    if (!s) return false;
+    if ((s as any).crosses_day === true || (s as any).is_overnight === true) return true;
+    if (s.start && s.end) {
+      const startHour = parseInt(s.start.split(':')[0]) || 0;
+      const endHour = parseInt(s.end.split(':')[0]) || 0;
+      if (endHour < startHour || (endHour === 0 && startHour > 0)) {
+        return true;
+      }
+    }
+    return false;
   };
 
   // Load master shifts from Supabase on mount or when selectedProject changes
@@ -448,7 +488,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
           const colors = ["bg-blue-500", "bg-indigo-500", "bg-emerald-500", "bg-amber-500", "bg-purple-500", "bg-rose-500", "bg-teal-500"];
           
           data.forEach((s: any, idx: number) => {
-            const colorClass = colors[idx % colors.length];
+            const colorClass = settings?.shifts?.[s.code]?.color || colors[idx % colors.length];
             shiftMap[s.code] = {
               label: s.code,
               start: s.start_time,
@@ -470,6 +510,92 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
   }, [selectedProject]);
   const [sortConfig, setSortConfig] = useState<{ key: 'name' | 'interval' | 'activity', direction: 'asc' | 'desc' }>({ key: 'interval', direction: 'asc' });
   const [showActions, setShowActions] = useState(false);
+  const [showBulkRemoveModal, setShowBulkRemoveModal] = useState(false);
+  const [bulkRemoveStart, setBulkRemoveStart] = useState("");
+  const [bulkRemoveEnd, setBulkRemoveEnd] = useState("");
+  const [bulkRemoveTarget, setBulkRemoveTarget] = useState<"all" | "filtered">("all");
+
+  const [cellContextMenu, setCellContextMenu] = useState<{
+    x: number;
+    y: number;
+    agentId: string;
+    slotIdx: number;
+  } | null>(null);
+
+  const handleSetCellActivity = (agentId: string, slotIdx: number, activityCode: string | null) => {
+    setAgentActivities(prev => {
+      const nextProj = { ...prev[selectedProject] };
+      const nextDate = { ...nextProj[selectedDate] };
+      const agentActs = { ...(nextDate[agentId] || {}) };
+      
+      if (!activityCode) {
+        delete agentActs[slotIdx];
+      } else {
+        agentActs[slotIdx] = activityCode;
+      }
+      
+      nextDate[agentId] = agentActs;
+      nextProj[selectedDate] = nextDate;
+      
+      return {
+        ...prev,
+        [selectedProject]: nextProj
+      };
+    });
+    setCellContextMenu(null);
+    showNotification(
+      activityCode 
+        ? `Activity ${getActivityDef(activityCode, selectedProject)?.label} successfully set! ⏱️`
+        : "Activity successfully deleted! 🗑️", 
+      "success"
+    );
+  };
+
+  const handleBulkClearBreaks = (startStr: string, endStr: string, targetType: "all" | "filtered", filteredAgentsToClear: any[]) => {
+    const start = parseISO(startStr);
+    const end = parseISO(endStr);
+    if (!startStr || !endStr || isNaN(start.getTime()) || isNaN(end.getTime())) {
+      showNotification("Invalid date range! 📅", "error");
+      return;
+    }
+    if (start > end) {
+      showNotification("Start date must be less than or equal to end date! ⚠️", "error");
+      return;
+    }
+
+    const agentsToClear = targetType === "filtered"
+      ? filteredAgentsToClear
+      : combinedAgents.filter(a => matchProject(a.project, selectedProject));
+
+    if (agentsToClear.length === 0) {
+      showNotification("No agents found match the criteria for break deletion! ⚠️", "info");
+      return;
+    }
+
+    setAgentActivities(prev => {
+      const nextProj = { ...prev[selectedProject] };
+      let current = start;
+      while (current <= end) {
+        const dateStr = format(current, "yyyy-MM-dd");
+        const nextDate = { ...nextProj[dateStr] };
+        
+        agentsToClear.forEach(agent => {
+          nextDate[agent.id] = {}; // Clear all activities
+        });
+        
+        nextProj[dateStr] = nextDate;
+        current = addDays(current, 1);
+      }
+      
+      return {
+        ...prev,
+        [selectedProject]: nextProj
+      };
+    });
+
+    showNotification(`Successfully deleted bulk breaks for ${agentsToClear.length} agents within the date range! 🗑️`, "success");
+    setShowBulkRemoveModal(false);
+  };
 
   // DB Tab States & Helpers (Separate Custom Workforce DB)
   const [dbEmployees, setDbEmployees] = useState<any[]>([]);
@@ -712,7 +838,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
 
   const saveRosterSchedule = async () => {
     if (generatedRoster.length === 0) {
-      showNotification("Tidak ada roster schedule untuk disimpan.", "info");
+      showNotification("No roster schedule available to save.", "info");
       return;
     }
 
@@ -736,7 +862,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
 
     try {
       await upsertRosterSchedule(records);
-      showNotification("Roster Schedule berhasil disimpan ke Supabase!", "success");
+      showNotification("Roster Schedule successfully saved to Supabase!", "success");
     } catch (err: any) {
       console.warn("Failed to sync schedule to Supabase. Saving to local storage fallback.", err);
       // Fallback to local storage per project
@@ -745,7 +871,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
         rosterStorage[r.empId] = r.roster;
       });
       localStorage.setItem(`supabase_roster_fallback_${rosterStartDate}_${rosterEndDate}_${selectedProject}`, JSON.stringify(rosterStorage));
-      showNotification("Disimpan ke penyimpanan lokal (Offline Mode).", "info");
+      showNotification("Saved to local storage (Offline Mode).", "info");
     }
   };
 
@@ -861,12 +987,12 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
       await upsertIntervalRequirements(records);
       setHistUsingFallback(false);
       localStorage.setItem(`supabase_interval_req_${histIntervalType}_${selectedProject}`, JSON.stringify(targetMap));
-      showNotification("Data interval berhasil disimpan ke Supabase!", "success");
+      showNotification("Interval data successfully saved to Supabase!", "success");
     } catch (err: any) {
       console.warn("Failed to sync to Supabase. Saving locally only:", err);
       setHistUsingFallback(true);
       localStorage.setItem(`supabase_interval_req_${histIntervalType}_${selectedProject}`, JSON.stringify(targetMap));
-      showNotification("Penyimpanan Supabase gagal. Data disimpan secara lokal (offline fallback).", "info");
+      showNotification("Supabase storage failed. Data saved locally (offline fallback).", "info");
     } finally {
       setHistSaving(false);
     }
@@ -902,7 +1028,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
     
     setHistRequirements(seeded);
     saveIntervalRequirements(seeded);
-    showNotification("Berhasil men-generate kurva agen realistis!", "success");
+    showNotification("Successfully generated realistic agent curve!", "success");
   };
 
   const clearAllRequirements = () => {
@@ -917,12 +1043,12 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
     
     setHistRequirements(cleared);
     saveIntervalRequirements(cleared);
-    showNotification("Semua data interval berhasil dikosongkan!", "success");
+    showNotification("All interval data successfully cleared!", "success");
   };
 
   const handleBulkImport = () => {
     if (!histBulkInput.trim()) {
-      showNotification("Silakan masukkan data interval terlebih dahulu.", "error");
+      showNotification("Please enter interval data first.", "error");
       return;
     }
     
@@ -949,7 +1075,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
       setHistRequirements(newRequirements);
       saveIntervalRequirements(newRequirements);
       setHistBulkInput("");
-      showNotification(`Sukses mengimpor ${importedCount} baris interval untuk tanggal ${targetDate}!`, "success");
+      showNotification(`Successfully imported ${importedCount} interval rows for date ${targetDate}!`, "success");
     } else {
       let rowsImported = 0;
       for (let rowIndex = 0; rowIndex < slots.length; rowIndex++) {
@@ -975,7 +1101,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
       setHistRequirements(newRequirements);
       saveIntervalRequirements(newRequirements);
       setHistBulkInput("");
-      showNotification(`Sukses mengimpor tabel ${rowsImported} baris untuk ${days.length} hari!`, "success");
+      showNotification(`Successfully imported table containing ${rowsImported} rows for ${days.length} days!`, "success");
     }
   };
 
@@ -1042,14 +1168,14 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
       const updatedList = dbEmployees.filter(emp => !selectedDbEmployeeIds.includes(emp.id));
       setDbEmployees(updatedList);
       localStorage.setItem("supabase_workforce_fallback", JSON.stringify(updatedList));
-      showNotification(`Berhasil menghapus ${selectedDbEmployeeIds.length} karyawan`, 'success');
+      showNotification(`Successfully deleted ${selectedDbEmployeeIds.length} employees`, 'success');
       setSelectedDbEmployeeIds([]);
     } catch (err) {
       // Allow fallback delete
       const updatedList = dbEmployees.filter(emp => !selectedDbEmployeeIds.includes(emp.id));
       setDbEmployees(updatedList);
       localStorage.setItem("supabase_workforce_fallback", JSON.stringify(updatedList));
-      showNotification(`Berhasil menghapus ${selectedDbEmployeeIds.length} karyawan (offline mode)`, 'success');
+      showNotification(`Successfully deleted ${selectedDbEmployeeIds.length} employees (offline mode)`, 'success');
       setSelectedDbEmployeeIds([]);
     } finally {
       setDbLoading(false);
@@ -1061,7 +1187,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
   const handleSingleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!singleFormData.name.trim()) {
-      showNotification("Nama wajib diisi.", "error");
+      showNotification("Name is required.", "error");
       return;
     }
     setDbLoading(true);
@@ -1093,7 +1219,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
       setDbEmployees(updatedList);
       localStorage.setItem("supabase_workforce_fallback", JSON.stringify(updatedList));
       
-      showNotification(`Karyawan "${singleFormData.name}" berhasil ditambahkan!`, "success");
+      showNotification(`Employee "${singleFormData.name}" successfully added!`, "success");
       setIsAddingSingle(false);
       setSingleFormData({
         nip: "",
@@ -1588,6 +1714,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                         { label: "Swap Shift", icon: History, onClick: () => showNotification("Fitur Swap Shift segera hadir! 🔄", "info") },
                         { label: "Approval", icon: ShieldCheck, onClick: () => showNotification("Fitur Persetujuan/Approval segera hadir! 🛡️", "info") },
                         { label: "Auto Break", icon: Coffee, onClick: () => { handleAutoBreak(); setShowActions(false); } },
+                        { label: "Remove Break (Bulk)", icon: Trash2, onClick: () => { setBulkRemoveStart(selectedDate); setBulkRemoveEnd(selectedDate); setShowBulkRemoveModal(true); setShowActions(false); } },
                         { label: "Download", icon: Download, onClick: () => showNotification("Mengunduh laporan... 💾", "info") },
                       ].map((item, i) => (
                         <button 
@@ -1710,8 +1837,8 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                 });
 
                 const sortedCombinedRows = [...combinedRows].sort((rowA, rowB) => {
-                  const isDupA = rowA.isContinuation && (rowA.shiftCode === "M1" || rowA.shiftCode === "M3");
-                  const isDupB = rowB.isContinuation && (rowB.shiftCode === "M1" || rowB.shiftCode === "M3");
+                  const isDupA = rowA.isContinuation && isShiftCrossDay(rowA.shiftCode);
+                  const isDupB = rowB.isContinuation && isShiftCrossDay(rowB.shiftCode);
 
                   if (isDupA && !isDupB) return -1;
                   if (!isDupA && isDupB) return 1;
@@ -1732,7 +1859,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                                 </span>
                               )}
                             </span>
-                            <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold text-white ${shiftCode === "OFF" ? "bg-rose-500" : (shift?.color || "bg-gray-400")}`}>{shiftCode}</span>
+                            <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold text-white ${shiftCode.toUpperCase() === "OFF" ? "bg-rose-500" : (shift?.color || "bg-gray-400")}`}>{shiftCode.toUpperCase()}</span>
                           </div>
                           <span className="text-[8px] sm:text-[9px] font-bold text-neutral-gray uppercase tracking-widest opacity-60 truncate flex items-center justify-between gap-1">
                             <span className="truncate">
@@ -1766,11 +1893,19 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                         return (
                           <td 
                             key={i} 
-                            title={isWithinShift ? (activity ? `${activity.label} (Klik untuk hapus)` : "Kerja (Klik untuk tambah break)") : "Luar Shift"}
                             className="p-0 min-w-[28px] px-0.5 relative cursor-pointer group/cell h-10 sm:h-12 border-b border-gray-100"
                             onClick={() => {
+                              // Left click disabled as requested to prevent accidental break additions
+                            }}
+                            onContextMenu={(e) => {
                               if (!isWithinShift) return;
-                              handleToggleCellBreak(agent.id, i, activityKey);
+                              e.preventDefault();
+                              setCellContextMenu({
+                                x: e.clientX,
+                                y: e.clientY,
+                                agentId: agent.id,
+                                slotIdx: i
+                              });
                             }}
                           >
                             {isWithinShift && (
@@ -1784,6 +1919,22 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                               />
                             )}
                             <div className="absolute inset-0 z-20 opacity-0 bg-black/5" />
+
+                            {/* Beautiful Custom CSS Tooltip */}
+                            <div className="absolute bottom-[80%] left-1/2 -translate-x-1/2 mb-2 pointer-events-none opacity-0 scale-95 group-hover/cell:opacity-100 group-hover/cell:scale-100 transition-all duration-150 z-50 flex flex-col items-center">
+                              <div className="bg-slate-900/95 backdrop-blur-md text-white border border-slate-800 rounded-xl px-3 py-2 text-[9px] font-bold shadow-xl whitespace-nowrap flex flex-col gap-1 leading-none items-center">
+                                <span className="text-neutral-gray font-mono tracking-widest text-[8px]">{intervals[i]}</span>
+                                <span className="text-white font-black uppercase tracking-wider">
+                                  {isWithinShift ? (activity ? activity.label : "Kerja (Aktif)") : "Luar Shift"}
+                                </span>
+                                {isWithinShift && (
+                                  <span className="text-[#818cf8] font-black text-[7px] tracking-widest mt-0.5 uppercase">
+                                    Klik Kanan untuk Kelola
+                                  </span>
+                                )}
+                              </div>
+                              <div className="w-1.5 h-1.5 bg-slate-900 rotate-45 -mt-0.75 border-r border-b border-slate-800" />
+                            </div>
                           </td>
                         );
                       })}
@@ -1825,6 +1976,180 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
           </div>
         </div>
       </div>
+
+      {/* Bulk Remove Breaks Modal */}
+      <AnimatePresence>
+        {showBulkRemoveModal && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowBulkRemoveModal(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-md"
+            />
+            
+            {/* Modal Content */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 15 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 15 }}
+              transition={{ type: "spring", duration: 0.4 }}
+              className="bg-white rounded-3xl shadow-2xl border border-gray-100 p-6 md:p-8 w-full max-w-md relative z-10 flex flex-col gap-6 animate-in fade-in zoom-in-95 duration-200"
+            >
+              <div>
+                <h3 className="text-sm font-black text-black uppercase tracking-widest flex items-center gap-2.5">
+                  <Trash2 size={18} className="text-rose-600 animate-pulse" />
+                  BULK REMOVE BREAKS
+                </h3>
+                <p className="text-gray-400 text-[10px] font-bold uppercase tracking-wider mt-1.5 leading-relaxed">
+                  Hapus semua break/aktivitas custom dalam rentang tanggal untuk project <span className="text-rose-600 font-extrabold">"{selectedProject}"</span>.
+                </p>
+              </div>
+
+              <div className="space-y-4">
+                {/* Start Date */}
+                <div className="space-y-1.5 font-sans">
+                  <label className="text-[9px] font-black text-neutral-gray uppercase tracking-widest block">Tanggal Mulai</label>
+                  <input 
+                    type="date" 
+                    value={bulkRemoveStart} 
+                    onChange={e => setBulkRemoveStart(e.target.value)} 
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-1 focus:ring-rose-500 font-mono"
+                  />
+                </div>
+
+                {/* End Date */}
+                <div className="space-y-1.5 font-sans">
+                  <label className="text-[9px] font-black text-neutral-gray uppercase tracking-widest block">Tanggal Selesai</label>
+                  <input 
+                    type="date" 
+                    value={bulkRemoveEnd} 
+                    onChange={e => setBulkRemoveEnd(e.target.value)} 
+                    className="w-full bg-slate-50 border border-slate-100 rounded-xl px-4 py-2.5 text-[10px] font-black uppercase tracking-widest outline-none focus:ring-1 focus:ring-rose-500 font-mono"
+                  />
+                </div>
+
+                {/* Target selection */}
+                <div className="space-y-1.5 font-sans">
+                  <label className="text-[9px] font-black text-neutral-gray uppercase tracking-widest block">Target Agent</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setBulkRemoveTarget("all")}
+                      className={`py-2.5 px-3 text-[9px] font-black uppercase tracking-wider rounded-xl transition-all border ${bulkRemoveTarget === "all" ? "bg-black text-white border-black" : "bg-slate-50 text-slate-500 border-slate-100 hover:bg-slate-100"}`}
+                    >
+                      Semua Agent ({combinedAgents.filter(a => matchProject(a.project, selectedProject)).length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setBulkRemoveTarget("filtered")}
+                      className={`py-2.5 px-3 text-[9px] font-black uppercase tracking-wider rounded-xl transition-all border ${bulkRemoveTarget === "filtered" ? "bg-black text-white border-black" : "bg-slate-50 text-slate-500 border-slate-100 hover:bg-slate-100"}`}
+                    >
+                      Agent Filter ({filteredAgents.length})
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Confirm Buttons */}
+              <div className="flex items-center gap-3 pt-2 font-sans">
+                <button
+                  type="button"
+                  onClick={() => setShowBulkRemoveModal(false)}
+                  className="flex-1 py-3 border border-slate-200 hover:bg-slate-50 text-slate-500 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors flex items-center justify-center gap-2"
+                >
+                  Batal
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleBulkClearBreaks(bulkRemoveStart, bulkRemoveEnd, bulkRemoveTarget, filteredAgents)}
+                  className="flex-1 py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg shadow-rose-100"
+                >
+                  <Trash2 size={13} />
+                  Hapus
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Context Menu Popup for right click action on interval cells */}
+      {cellContextMenu && (
+        <>
+          {/* Backdrop overlay to close when click outside */}
+          <div 
+            className="fixed inset-0 z-[1000] bg-transparent" 
+            onClick={() => setCellContextMenu(null)}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              setCellContextMenu(null);
+            }}
+          />
+          
+          {/* Context Menu Popup */}
+          <div 
+            className="fixed z-[1001] bg-white rounded-2xl shadow-2xl border border-gray-100 p-2 min-w-[170px] flex flex-col gap-1 text-[10px] font-sans"
+            style={{ 
+              top: `${Math.min(cellContextMenu.y, (typeof window !== "undefined" ? window.innerHeight : 1000) - 200)}px`, 
+              left: `${Math.min(cellContextMenu.x, (typeof window !== "undefined" ? window.innerWidth : 1000) - 180)}px`
+            }}
+          >
+            <div className="px-3 py-1.5 text-gray-400 font-extrabold text-[9px] tracking-widest border-b border-gray-100 uppercase">
+              Aktivitas: {intervals[cellContextMenu.slotIdx]}
+            </div>
+            
+            {/* List activities */}
+            <div className="flex flex-col gap-0.5 max-h-[220px] overflow-y-auto">
+              {(() => {
+                const projKey = (selectedProject && selectedProject !== "all") ? selectedProject : "Project Alpha";
+                const projActs = settings.activities?.[projKey] || ACTIVITY_TYPES;
+                
+                return Object.keys(projActs).map((key) => {
+                  const act = getActivityDef(key, selectedProject);
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => handleSetCellActivity(cellContextMenu.agentId, cellContextMenu.slotIdx, key)}
+                      className="w-full text-left px-3 py-2 rounded-xl hover:bg-slate-50 transition-colors flex items-center justify-between gap-3 text-slate-700 font-bold uppercase tracking-wider"
+                    >
+                      <span className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${act.color} inline-block`} />
+                        {act.label}
+                      </span>
+                      <span className="text-[8px] font-black text-slate-400 font-mono tracking-wider">{key}</span>
+                    </button>
+                  );
+                });
+              })()}
+            </div>
+            
+            {/* Remove option */}
+            {(() => {
+              const targetAgent = combinedAgents.find(a => a.id === cellContextMenu.agentId);
+              const activities = targetAgent?.activities as Record<number, string>;
+              const hasActivity = activities && activities[cellContextMenu.slotIdx];
+              
+              if (hasActivity) {
+                return (
+                  <button
+                    type="button"
+                    onClick={() => handleSetCellActivity(cellContextMenu.agentId, cellContextMenu.slotIdx, null)}
+                    className="w-full text-left px-3 py-2 rounded-xl hover:bg-rose-50 text-rose-600 transition-colors flex items-center gap-2 border-t border-gray-100 mt-1 font-bold uppercase tracking-wider"
+                  >
+                    <Trash2 size={12} className="text-rose-500 shrink-0" />
+                    Hapus Aktivitas
+                  </button>
+                );
+              }
+              return null;
+            })()}
+          </div>
+        </>
+      )}
     </div>
   );
 };
@@ -1868,7 +2193,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
           .filter(a => matchProject(a.project, selectedProject));
 
       if (agentsToSchedule.length === 0) {
-        showNotification(`Tidak ada Agent terdaftar untuk Project "${selectedProject === "all" ? "Semua Project" : selectedProject}". Silakan daftarkan Agent terlebih dahulu di tab Database Karyawan atau pilih Project lain.`, "error");
+        showNotification(`No agents registered for Project "${selectedProject === "all" ? "All Projects" : selectedProject}". Please register agents under the Employee DB tab first, or choose another project.`, "error");
         setIsGeneratingRoster(false);
         return;
       }
@@ -2155,13 +2480,12 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
           }
           if (Object.values(weekCounts).some(count => count > 6)) return false;
 
-          // 4. Max consecutive special shifts ("S6", "S7", "M3", "M1") <= 3
-          const specialCodes = ['S6', 'S7', 'M3', 'M1'];
+          // 4. Max consecutive special shifts (nyebrang hari / overnight) <= 3
           let maxConsecSpecial = 0;
           let currentConsecSpecial = 0;
           for (let i = 0; i < days.length; i++) {
               const val = tempRoster[days[i]];
-              if (val && specialCodes.includes(val.toUpperCase())) {
+              if (val && isShiftCrossDay(val)) {
                   currentConsecSpecial++;
                   if (currentConsecSpecial > maxConsecSpecial) maxConsecSpecial = currentConsecSpecial;
               } else {
@@ -2218,11 +2542,8 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
       };
 
       const shiftCodesSorted = Object.keys(compositionShifts).sort((a, b) => {
-          const uA = a.toUpperCase();
-          const uB = b.toUpperCase();
-          const spec = ['M1', 'S7', 'S6', 'M3'];
-          const isA_Spec = spec.includes(uA);
-          const isB_Spec = spec.includes(uB);
+          const isA_Spec = isShiftCrossDay(a);
+          const isB_Spec = isShiftCrossDay(b);
           if (isA_Spec && !isB_Spec) return -1;
           if (!isA_Spec && isB_Spec) return 1;
           return 0;
@@ -2803,12 +3124,12 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
               }
           }
           
-          // 2. M1/S7 max 4 consecutive penalty
-          if (shiftCode.toUpperCase() === 'M1' || shiftCode.toUpperCase() === 'S7') {
+          // 2. Max 4 consecutive overnight shifts penalty
+          if (isShiftCrossDay(shiftCode)) {
              let consec = 0;
              for (let i = dayIdx - 1; i >= 0; i--) {
                  const prevCode = roster.find(r => r.empId === agentId)?.roster[days[i]];
-                 if (prevCode && (prevCode.toUpperCase() === 'M1' || prevCode.toUpperCase() === 'S7')) {
+                 if (prevCode && isShiftCrossDay(prevCode)) {
                     consec++;
                  } else {
                     break;
@@ -2848,21 +3169,21 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
           const totalWorked = Object.values(roster.find(r => r.empId === agentId)!.roster).filter(s => s !== 'OFF').length;
           score -= totalWorked * 100;
 
-          // 6. Shift type total balancing (Avoid dominating M1/S7)
-          if (shiftCode.toUpperCase() === 'M1' || shiftCode.toUpperCase() === 'S7') {
+          // 6. Shift type total balancing (Avoid dominating overnight shifts)
+          if (isShiftCrossDay(shiftCode)) {
              const totalM1S7 = Object.values(roster.find(r => r.empId === agentId)!.roster)
-                .filter(s => s && (s.toUpperCase() === 'M1' || s.toUpperCase() === 'S7')).length;
-             score += totalM1S7 * 500; // Prefer those who already have M1/S7 (cenderung by same agents)
+                .filter(s => s && isShiftCrossDay(s)).length;
+             score += totalM1S7 * 500; // Prefer those who already have overnight shifts
           }
 
           return score;
       };
 
       const shiftCodesSorted = Object.keys(compositionShifts).sort((a, b) => {
-          const uA = a.toUpperCase();
-          const uB = b.toUpperCase();
-          if ((uA === 'M1' || uA === 'S7') && !(uB === 'M1' || uB === 'S7')) return -1;
-          if (!(uA === 'M1' || uA === 'S7') && (uB === 'M1' || uB === 'S7')) return 1;
+          const isA_Spec = isShiftCrossDay(a);
+          const isB_Spec = isShiftCrossDay(b);
+          if (isA_Spec && !isB_Spec) return -1;
+          if (!isA_Spec && isB_Spec) return 1;
           return 0;
       });
 
@@ -2878,7 +3199,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                   if (assignedSoFar >= maxWorkingDaysPerAgent) return false;
 
                   // Hard Constraint 1: Gender for M1 & S7
-                  if (shiftCode.toUpperCase() === 'M1' || shiftCode.toUpperCase() === 'S7') {
+                  if (isShiftCrossDay(shiftCode)) {
                       const gender = (agent.gender || '').toUpperCase().trim();
                       if (gender !== 'L' && gender !== 'MALE' && gender !== 'LAKI-LAKI' && gender !== 'PRIA') {
                           return false; 
@@ -2910,11 +3231,11 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                   if (consecWork >= 5) return false; 
                   
                   // Hard Constraint 4: Max 4 consecutive M1 / S7
-                  if (shiftCode.toUpperCase() === 'M1' || shiftCode.toUpperCase() === 'S7') {
+                  if (isShiftCrossDay(shiftCode)) {
                      let consecM1S7 = 0;
                      for (let i = dayIdx - 1; i >= 0; i--) {
                          const prevCode = roster.find(r => r.empId === agent.id)?.roster[days[i]];
-                         if (prevCode && (prevCode.toUpperCase() === 'M1' || prevCode.toUpperCase() === 'S7')) {
+                         if (prevCode && isShiftCrossDay(prevCode)) {
                             consecM1S7++;
                          } else {
                             break;
@@ -2988,7 +3309,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
           let currentConsec = 0;
           for (let i = 0; i < days.length; i++) {
               const val = tempRoster[days[i]];
-              if (val && (val.toUpperCase() === 'M1' || val.toUpperCase() === 'S7')) {
+              if (val && isShiftCrossDay(val)) {
                   currentConsec++;
                   if (currentConsec > maxConsec) maxConsec = currentConsec;
               } else {
@@ -3021,7 +3342,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                       const currentCount = roster.filter(r => r.roster[d] === shiftCode).length;
                       if (currentCount >= (requiredSlotsPerDayPerShift[d]?.[shiftCode] || 0)) continue;
 
-                      if (shiftCode.toUpperCase() === 'M1' || shiftCode.toUpperCase() === 'S7') {
+                      if (isShiftCrossDay(shiftCode)) {
                           const gender = (agent.gender || '').toUpperCase().trim();
                           if (gender !== 'L' && gender !== 'MALE' && gender !== 'LAKI-LAKI' && gender !== 'PRIA') {
                               continue;
@@ -3067,7 +3388,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                       const currentCount = roster.filter(r => r.roster[d] === shiftCode).length;
                       if (currentCount >= (requiredSlotsPerDayPerShift[d]?.[shiftCode] || 0)) continue;
 
-                      if (shiftCode.toUpperCase() === 'M1' || shiftCode.toUpperCase() === 'S7') {
+                      if (isShiftCrossDay(shiftCode)) {
                           const gender = (agent.gender || '').toUpperCase().trim();
                           if (gender !== 'L' && gender !== 'MALE' && gender !== 'LAKI-LAKI' && gender !== 'PRIA') {
                               continue;
@@ -3113,7 +3434,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                       const currentCount = roster.filter(r => r.roster[d] === shiftCode).length;
                       if (currentCount >= (requiredSlotsPerDayPerShift[d]?.[shiftCode] || 0)) continue;
 
-                      if (shiftCode.toUpperCase() === 'M1' || shiftCode.toUpperCase() === 'S7') {
+                      if (isShiftCrossDay(shiftCode)) {
                           const gender = (agent.gender || '').toUpperCase().trim();
                           if (gender !== 'L' && gender !== 'MALE' && gender !== 'LAKI-LAKI' && gender !== 'PRIA') {
                               continue;
@@ -3146,7 +3467,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
 
                   // Precompute helper functions for candidate evaluation
                   const isGenderMatched = (empId: string) => {
-                      if (shiftCode.toUpperCase() !== 'M1' && shiftCode.toUpperCase() !== 'S7') return true;
+                      if (!isShiftCrossDay(shiftCode)) return true;
                       const agent = agentsToSchedule.find(a => a.id === empId);
                       const gender = (agent?.gender || '').toUpperCase().trim();
                       return gender === 'L' || gender === 'MALE' || gender === 'LAKI-LAKI' || gender === 'PRIA';
@@ -3197,8 +3518,8 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                       }
                   }
 
-                  // --- STAGE 3: Relax Gender check for M1/S7 shifts (Rest OK, Work Days < Limit, Max Consecutive <= 5) ---
-                  if (!chosenAgentRoster && (shiftCode.toUpperCase() === 'M1' || shiftCode.toUpperCase() === 'S7')) {
+                  // --- STAGE 3: Relax Gender check for overnight shifts (Rest OK, Work Days < Limit, Max Consecutive <= 5) ---
+                  if (!chosenAgentRoster && isShiftCrossDay(shiftCode)) {
                       let stage3 = availableAgents.filter(r => {
                           if (!isRestTimeOk(r.empId)) return false;
                           const wD = Object.values(r.roster).filter(s => s !== 'OFF').length;
@@ -3311,7 +3632,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                    });
                    
                    for (const shiftCode of sortedByDeficit) {
-                        if (shiftCode.toUpperCase() === 'M1' || shiftCode.toUpperCase() === 'S7') {
+                        if (isShiftCrossDay(shiftCode)) {
                             const gender = (agent.gender || '').toUpperCase().trim();
                             if (gender !== 'L' && gender !== 'MALE' && gender !== 'LAKI-LAKI' && gender !== 'PRIA') continue;
                             
@@ -3335,7 +3656,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                         
                         if (!restOk) continue;
                         selectedShift = shiftCode;
-                        if (shiftCode.toUpperCase() !== 'M1' && shiftCode.toUpperCase() !== 'S7') break;
+                        if (!isShiftCrossDay(shiftCode)) break;
                    }
                    
                    if (selectedShift) {
@@ -3363,7 +3684,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                       });
                       
                       let code = sortedByDeficitFallback.find(c => {
-                          if (c.toUpperCase() === 'M1' || c.toUpperCase() === 'S7') {
+                          if (isShiftCrossDay(c)) {
                               const g = (agent.gender || '').toUpperCase().trim();
                               if (g !== 'L' && g !== 'MALE' && g !== 'LAKI-LAKI' && g !== 'PRIA') return false;
                           }
@@ -3374,7 +3695,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                       temp[d] = code;
                       
                       let m1s7Ok = true;
-                      if (code.toUpperCase() === 'M1' || code.toUpperCase() === 'S7') {
+                      if (isShiftCrossDay(code)) {
                           m1s7Ok = checkMaxConsecM1S7(temp, 4);
                       }
                       
@@ -3450,7 +3771,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
              const tempRoster = { ...agentRoster.roster, [d]: candidateShift };
              if (!checkMaxConsecWork(tempRoster, 5)) continue;
              
-             if (candidateShift.toUpperCase() === 'M1' || candidateShift.toUpperCase() === 'S7') {
+             if (isShiftCrossDay(candidateShift)) {
                  const agent = agentsToSchedule.find(a => a.id === agentRoster.empId);
                  const gender = (agent?.gender || '').toUpperCase().trim();
                  if (gender !== 'L' && gender !== 'MALE' && gender !== 'LAKI-LAKI' && gender !== 'PRIA') continue;
@@ -3536,7 +3857,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                 const shiftToTest = tempRoster[testDay];
                 if (shiftToTest === 'OFF') continue;
                 
-                if (shiftToTest.toUpperCase() === 'M1' || shiftToTest.toUpperCase() === 'S7') {
+                if (isShiftCrossDay(shiftToTest)) {
                    const agent = agentsToSchedule.find(a => a.id === agentRoster.empId);
                    const gender = (agent?.gender || '').toUpperCase().trim();
                    if (gender !== 'L' && gender !== 'MALE' && gender !== 'LAKI-LAKI' && gender !== 'PRIA') validConstraints = false;
@@ -3670,7 +3991,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                       const date = parseISO(dateStr);
                       const isWeekend = date.getDay() === 0 || date.getDay() === 6;
                       return (
-                        <th key={i} className={`px-2 py-3 border-b border-gray-100 border-r border-gray-50/50 text-center min-w-[65px] ${isWeekend ? 'bg-rose-50/30' : ''}`}>
+                        <th key={i} className={`px-2 py-3 border-b border-gray-100 border-r border-gray-50/50 text-center w-[65px] min-w-[65px] max-w-[65px] ${isWeekend ? 'bg-rose-50/30' : ''}`}>
                           <span className={`block text-[9px] font-bold uppercase tracking-widest ${isWeekend ? 'text-active-red/60' : 'text-neutral-gray'}`}>
                             {format(date, "EEE")}
                           </span>
@@ -3680,12 +4001,12 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                         </th>
                       );
                     })}
-                    <th className="px-3 py-3 border-b border-gray-200 border-r border-gray-50/50 text-center min-w-[90px] bg-indigo-50/50">
+                    <th className="px-3 py-3 border-b border-gray-200 border-r border-gray-50/50 text-center w-[90px] min-w-[90px] max-w-[90px] bg-indigo-50/50">
                       <span className="block text-[9px] font-black uppercase tracking-widest text-[#6366f1]">
                         Hari Kerja
                       </span>
                     </th>
-                    <th className="px-3 py-3 border-b border-gray-200 border-r border-gray-50/50 text-center min-w-[90px] bg-rose-50/50">
+                    <th className="px-3 py-3 border-b border-gray-200 border-r border-gray-50/50 text-center w-[90px] min-w-[90px] max-w-[90px] bg-rose-50/50">
                       <span className="block text-[9px] font-black uppercase tracking-widest text-rose-600">
                         Hari Libur
                       </span>
@@ -3751,7 +4072,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                           const shiftInfo = (Object.keys(dbShifts).length > 0 ? dbShifts : SHIFTS)[shiftCode] || { color: 'bg-slate-200' };
                           
                           return (
-                            <td key={i} className={`p-1 border-r border-gray-50/50 text-center relative`}>
+                            <td key={i} className={`p-1 border-r border-gray-50/50 text-center relative w-[65px] min-w-[65px] max-w-[65px]`}>
                               <div 
                                 className={`mx-auto w-[48px] py-2 rounded-xl text-[10px] font-black transition-all hover:scale-105 cursor-pointer flex items-center justify-center
                                   ${isOff ? 'text-slate-400 bg-slate-100 inset-shadow-sm shadow-none opacity-60' : 'text-white shadow-sm ' + shiftInfo?.color}`}
@@ -3766,10 +4087,10 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                           const offDays = days.filter(d => !rosterMap[d] || rosterMap[d] === 'OFF').length;
                           return (
                             <>
-                              <td className="p-1 border-r border-gray-50/50 text-center bg-indigo-50/10 font-bold min-w-[90px]">
+                              <td className="p-1 border-r border-gray-50/50 text-center bg-indigo-50/10 font-bold w-[90px] min-w-[90px] max-w-[90px]">
                                 <span className="text-[11px] font-black text-slate-800">{workDays} Hari</span>
                               </td>
-                              <td className="p-1 border-r border-gray-50/50 text-center bg-rose-50/10 font-bold min-w-[90px]">
+                              <td className="p-1 border-r border-gray-50/50 text-center bg-rose-50/10 font-bold w-[90px] min-w-[90px] max-w-[90px]">
                                 <span className="text-[11px] font-black text-rose-500">{offDays} Hari</span>
                               </td>
                             </>

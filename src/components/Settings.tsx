@@ -51,6 +51,21 @@ const SHIFT_DEFAULTS: Record<string, { s: string; e: string; w: number }> = {
   M1: { s: "22:00", e: "07:00", w: 14 }
 };
 
+const SHIFT_COLORS_OPTIONS = [
+  { value: "bg-slate-500", label: "Slate" },
+  { value: "bg-blue-500", label: "Blue" },
+  { value: "bg-indigo-500", label: "Indigo" },
+  { value: "bg-emerald-500", label: "Emerald" },
+  { value: "bg-green-500", label: "Green" },
+  { value: "bg-amber-500", label: "Amber" },
+  { value: "bg-orange-500", label: "Orange" },
+  { value: "bg-purple-500", label: "Purple" },
+  { value: "bg-rose-500", label: "Rose" },
+  { value: "bg-teal-500", label: "Teal" },
+  { value: "bg-cyan-500", label: "Cyan" },
+  { value: "bg-pink-500", label: "Pink" },
+];
+
 const DEFAULT_PROJECT_CHANNELS: Record<string, string[]> = {
   "Project Alpha": ["Voice", "Email", "Leader"],
   "Project Beta": ["Voice", "Non-Voice", "Chat"],
@@ -140,12 +155,18 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                 code: s.code,
                 s: s.start_time,
                 e: s.end_time,
-                w: s.weight || 1
+                w: s.weight || 1,
+                color: settings.shifts?.[s.code]?.color || '',
+                crosses_day: (settings.shifts?.[s.code] as any)?.crosses_day || false
               }));
               setShifts(mapped);
             } else {
               // Fallback default shifts depending on project
-              const defaultShifts = Object.entries(settings.shifts).map(([k, v]) => ({ code: k, ...(v as any) }));
+              const defaultShifts = Object.entries(settings.shifts).map(([k, v]) => ({
+                code: k,
+                ...(v as any),
+                crosses_day: (v as any).crosses_day || false
+              }));
               setShifts(defaultShifts);
             }
           }
@@ -353,7 +374,7 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
       };
     });
     setPuasaShifts(updatedPuasaShifts);
-    showStatus("Jam kerja & istirahat puasa berhasil dihitung otomatis! Silakan klik 'Update Sync' untuk menyimpan.");
+    showStatus("Fasting work hours & break times computed automatically! Please click 'Update Sync' to save.");
   };
 
   // Fetch shifts for selected fasting project dynamically when activeTab is puasa or selectedFastingProject changes
@@ -468,13 +489,13 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
 
   const handleInitializeTables = async () => {
     if (!postgresConnectionString.trim()) {
-      alert("Harap masukkan PostgreSQL Connection URI (DATABASE_URL) terlebih dahulu!");
+      alert("Please enter the PostgreSQL Connection URI (DATABASE_URL) first!");
       return;
     }
     
     setIsInitializingTables(true);
     setInitResult({ status: 'idle' });
-    showStatus("Menghubungkan ke PostgreSQL & Membuat tabel... ⏳");
+    showStatus("Connecting to PostgreSQL & Creating tables... ⏳");
 
     try {
       if (typeof window !== 'undefined') {
@@ -492,18 +513,18 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
       const resData = await response.json();
       if (resData.status === "success") {
         setInitResult({ status: 'success', message: resData.message });
-        showStatus("Tabel berhasil dibuat di Supabase! 🎉");
+        showStatus("Tables successfully created in Supabase! 🎉");
         alert(resData.message);
       } else {
         setInitResult({ status: 'error', message: resData.error });
-        showStatus("Gagal menginisialisasi tabel ❌");
-        alert("Gagal menginisialisasi tabel: " + resData.error);
+        showStatus("Failed to initialize tables ❌");
+        alert("Failed to initialize tables: " + resData.error);
       }
     } catch (err: any) {
       console.error(err);
       setInitResult({ status: 'error', message: err.message || "Failed to contact setup API" });
-      showStatus("Koneksi gagal ❌");
-      alert("Error: " + (err.message || "Gagal menghubungi backend API"));
+      showStatus("Connection failed ❌");
+      alert("Error: " + (err.message || "Failed to contact backend API"));
     } finally {
       setIsInitializingTables(false);
     }
@@ -701,7 +722,7 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
         const start = normalizeTime(s.s);
         const end = normalizeTime(s.e);
         if (start && end) {
-          newShifts[s.code] = { s: start, e: end, w: s.w };
+          newShifts[s.code] = { s: start, e: end, w: s.w, color: s.color, crosses_day: !!s.crosses_day };
           shiftsToUpload.push({
             code: s.code,
             s: start,
@@ -719,10 +740,10 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
       // 2. Save directly to Supabase master_shifts table for the selected project
       await upsertMasterShifts(selectedShiftProject, shiftsToUpload);
       
-      showStatus(`Shift untuk project "${selectedShiftProject}" berhasil tersimpan ke Supabase! ✅`);
+      showStatus(`Shifts for project "${selectedShiftProject}" saved successfully to Supabase! ✅`);
     } catch (err: any) {
       console.error("Failed to save shifts to Supabase:", err);
-      showStatus(`Tersimpan lokal. Supabase gagal: ${err.message || 'Cek koneksi database'} ⚠️`);
+      showStatus(`Saved locally. Supabase error: ${err.message || 'Check database connection'} ⚠️`);
     } finally {
       setIsPushing(false);
     }
@@ -792,7 +813,7 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
       setShowBulkHol(false);
       showStatus(`Imported & Saved ${newItems.length} holidays successfully! ✅`);
     } else {
-      alert("Format salah atau tidak valid. Gunakan format: YYYY-MM-DD,Nama Hari Libur,Tipe (Contoh: 2026-06-05,Hari Raya Natal,public atau 2026-06-05,Cuti Bersama,cuti)");
+      alert("Incorrect or invalid format. Use format: YYYY-MM-DD,Holiday Name,Type (Example: 2026-06-05,Christmas Day,public or 2026-06-05,Joint Leave,cuti)");
     }
   };
 
@@ -954,11 +975,11 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                       <Clock size={18} className="text-rose-600 animate-pulse" /> CHANNEL OPERATIONAL HOURS
                     </h4>
                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight mt-1.5 px-7">
-                      Tentukan jam operasional saluran komunikasi aktif berdasarkan proyek pilihan Anda
+                      Set active operational hours for communication channels based on your selected project
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Pilih Project:</span>
+                    <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Select Project:</span>
                     <select
                       className="p-2.5 px-4 bg-white border border-slate-200 rounded-xl text-[10px] font-black text-rose-600 uppercase tracking-widest cursor-pointer focus:ring-1 focus:ring-rose-500 outline-none shadow-sm"
                       value={selectedOpsProject}
@@ -976,11 +997,11 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                   {isLoadingOpsChannels ? (
                     <div className="py-12 flex flex-col items-center justify-center gap-2">
                       <RefreshCw size={24} className="animate-spin text-rose-600" />
-                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest animate-pulse">Memuat database channel...</span>
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest animate-pulse">Loading channel database...</span>
                     </div>
                   ) : opsChannels.length === 0 ? (
                     <div className="py-12 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-center text-slate-400 font-bold text-[10px] uppercase tracking-widest">
-                      Tidak ada saluran komunikasi aktif terdaftar untuk proyek ini.
+                      No active communication channels registered for this project.
                     </div>
                   ) : (
                     <div className="space-y-4">
@@ -1049,11 +1070,11 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                       <Zap size={18} className="text-rose-600 animate-pulse" /> ACTIVITY CONFIGURATION
                     </h4>
                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight mt-1.5 px-7">
-                      Kelola aktivitas khusus yang tersedia untuk masing-masing project
+                      Manage special activities available for each project
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Pilih Project:</span>
+                    <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Select Project:</span>
                     <select
                       className="p-2.5 px-4 bg-white border border-slate-200 rounded-xl text-[10px] font-black text-rose-600 uppercase tracking-widest cursor-pointer focus:ring-1 focus:ring-rose-500 outline-none shadow-sm"
                       value={selectedActivityProject}
@@ -1069,10 +1090,10 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                 {/* Shift Bar Color Section */}
                 <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-slate-200 shadow-sm">
                   <h5 className="m-0 font-black text-[11px] uppercase tracking-widest text-slate-900 mb-5 flex items-center gap-2">
-                    <Palette size={16} className="text-rose-600" /> WARNA SHIFT BAR (BACKGROUND KERJA)
+                    <Palette size={16} className="text-rose-600" /> SHIFT BAR COLOR (WORK BACKGROUND)
                   </h5>
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight -mt-3.5 mb-5 leading-normal">
-                    Pilih warna latar belakang untuk shift kerja roster yang ditampilkan pada grid utama:
+                    Choose background color for roster work shifts shown on the main grid:
                   </p>
 
                   <div className="flex items-center gap-3 bg-slate-50 p-5 rounded-2xl border border-slate-100 flex-wrap">
@@ -1092,7 +1113,7 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                         key={col.class}
                         onClick={() => {
                           setShiftBarColor(col.class);
-                          showStatus(`Warna Shift Bar diubah menjadi ${col.label}. Klik 'Save Activities' untuk menyimpan.`);
+                          showStatus(`Shift Bar Color changed to ${col.label}. Click 'Save Activities' to save.`);
                         }}
                         className={`px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all gap-2 flex items-center border ${
                           shiftBarColor === col.class 
@@ -1110,19 +1131,19 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                 {/* Add New Activity Form */}
                 <div className="bg-white p-6 md:p-8 rounded-[2rem] border border-slate-200 shadow-sm">
                   <h5 className="m-0 font-black text-[11px] uppercase tracking-widest text-slate-900 mb-5 flex items-center gap-2">
-                    <Plus size={16} className="text-rose-600" /> TAMBAH AKTIVITAS BARU ({selectedActivityProject})
+                    <Plus size={16} className="text-rose-600" /> ADD NEW ACTIVITY ({selectedActivityProject})
                   </h5>
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight -mt-3.5 mb-5 leading-normal">
-                    Buat kode aktivitas baru (misal: CO, QA, DS) untuk ditugaskan di lembar jadwal harian:
+                    Create a new activity code (e.g. CO, QA, DS) to assign in the daily schedule sheet:
                   </p>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 items-end bg-slate-50 p-5 rounded-2xl border border-slate-100">
                     <div>
-                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1.5">Code (Max 4 Huruf)</label>
+                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1.5">Code (Max 4 Letters)</label>
                       <input 
                         type="text"
                         maxLength={4}
-                        placeholder="contoh: CO"
+                        placeholder="e.g., CO"
                         value={newActivityCode}
                         onChange={e => setNewActivityCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
                         className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-black font-mono uppercase focus:ring-1 focus:ring-rose-500 outline-none"
@@ -1130,10 +1151,10 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                     </div>
 
                     <div>
-                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1.5">Label Aktivitas</label>
+                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1.5">Activity Label</label>
                       <input 
                         type="text"
-                        placeholder="contoh: Coaching"
+                        placeholder="e.g., Coaching"
                         value={newActivityLabel}
                         onChange={e => setNewActivityLabel(e.target.value)}
                         className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-black focus:ring-1 focus:ring-rose-500 outline-none"
@@ -1141,34 +1162,34 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                     </div>
 
                     <div>
-                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1.5">Durasi Default</label>
+                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1.5">Default Duration</label>
                       <select
                         value={newActivityDuration}
                         onChange={e => setNewActivityDuration(e.target.value)}
                         className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-black focus:ring-1 focus:ring-rose-500 outline-none cursor-pointer"
                       >
-                        <option value="1">15 Menit</option>
-                        <option value="2">30 Menit</option>
-                        <option value="4">1 Jam</option>
+                        <option value="1">15 Minutes</option>
+                        <option value="2">30 Minutes</option>
+                        <option value="4">1 Hour</option>
                         <option value="full">Full Day</option>
                         <option value="custom">Custom</option>
                       </select>
                     </div>
 
                     <div>
-                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1.5">Kategori</label>
+                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1.5">Category</label>
                       <select
                         value={newActivityCategory}
                         onChange={e => setNewActivityCategory(e.target.value)}
                         className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs font-black focus:ring-1 focus:ring-rose-500 outline-none cursor-pointer"
                       >
-                        <option value="work">Kerja (Prod)</option>
-                        <option value="break">Istirahat (Non-Prod)</option>
+                        <option value="work">Work (Prod)</option>
+                        <option value="break">Break (Non-Prod)</option>
                       </select>
                     </div>
 
                     <div className="flex flex-col gap-1.5">
-                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block">Pilih Warna</label>
+                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block">Select Color</label>
                       <div className="flex gap-1 items-center bg-white p-1.5 rounded-xl border border-slate-200 flex-wrap">
                         {['bg-active-red', 'bg-rose-500', 'bg-amber-400', 'bg-emerald-500', 'bg-teal-500', 'bg-sky-500', 'bg-indigo-600', 'bg-violet-700', 'bg-slate-900', 'bg-black', 'bg-orange-500'].map(col => (
                           <button
@@ -1185,12 +1206,12 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                     <button
                       onClick={() => {
                         if (!newActivityCode.trim() || !newActivityLabel.trim()) {
-                          alert("Isi kode dan label aktivitas terlebih dahulu!");
+                          alert("Please enter code and activity label first!");
                           return;
                         }
                         const currentProjActs = activities[selectedActivityProject] || {};
                         if (currentProjActs[newActivityCode]) {
-                          alert(`Kode aktivitas '${newActivityCode}' sudah ada untuk project ${selectedActivityProject}!`);
+                          alert(`Activity code '${newActivityCode}' already exists for project ${selectedActivityProject}!`);
                           return;
                         }
                         
@@ -1209,11 +1230,11 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                         setActivities(updated);
                         setNewActivityCode('');
                         setNewActivityLabel('');
-                        showStatus("Aktivitas didaftarkan! Klik 'Save Activities' di atas untuk menyimpan permanen.");
+                        showStatus("Activity registered! Click 'Save Activities' above to save permanently.");
                       }}
                       className="px-5 py-2.5 bg-slate-950 text-white font-black text-[10px] uppercase tracking-widest rounded-xl hover:bg-black hover:scale-105 transition-all flex items-center gap-1.5 shadow-md cursor-pointer"
                     >
-                      <Plus size={14} /> Tambahkan Aktivitas
+                      <Plus size={14} /> Add Activity
                     </button>
                   </div>
                 </div>
@@ -1221,16 +1242,16 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                 {/* Active Activities List */}
                 <div className="bg-slate-50 p-6 md:p-8 rounded-[2rem] border border-slate-200 shadow-sm">
                   <h5 className="m-0 font-black text-[11px] uppercase tracking-widest text-slate-900 mb-5 flex items-center gap-2">
-                    <Zap size={16} className="text-rose-600" /> DAFTAR AKTIVITAS AKTIF ({selectedActivityProject})
+                    <Zap size={16} className="text-rose-600" /> ACTIVE ACTIVITIES LIST ({selectedActivityProject})
                   </h5>
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight -mt-3.5 mb-6 leading-normal">
-                    Daftar aktivitas aktif untuk project ini. Anda dapat menyunting atau menghapusnya langsung dari daftar ini:
+                    Active activities list for this project. You can edit or delete them directly from this list:
                   </p>
 
                   <div className="space-y-3">
                     {Object.entries(activities[selectedActivityProject] || {}).length === 0 ? (
                       <div className="py-12 bg-white rounded-2xl border border-dashed border-slate-200 text-center text-slate-400 font-bold text-[10px] uppercase tracking-widest">
-                        Belum ada aktivitas terdaftar untuk project ini. Gunakan form di atas untuk menambahkan.
+                        No activities registered for this project yet. Use the form above to add.
                       </div>
                     ) : (
                       Object.entries(activities[selectedActivityProject] || {}).map(([code, act]: [string, any]) => (
@@ -1312,7 +1333,7 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                                   [selectedActivityProject]: newProjActs
                                 };
                                 setActivities(updated);
-                                showStatus("Aktivitas dihapus. Klik 'Save Activities' di atas untuk menyimpan.");
+                                showStatus("Activity deleted. Click 'Save Activities' above to save.");
                               }} 
                               className="p-2 text-slate-300 hover:text-rose-600 transition-all hover:bg-rose-50 rounded-xl"
                             >
@@ -1337,7 +1358,7 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                          MASTER SHIFT REGISTRY
                        </h4>
                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1.5">
-                         Terkoneksi ke project pada database workforce
+                         Connected to projects in the workforce database
                        </p>
                      </div>
                      <div className="flex items-center gap-2">
@@ -1357,17 +1378,19 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                    {isLoadingShifts ? (
                      <div className="py-12 flex flex-col items-center justify-center gap-2">
                        <RefreshCw size={24} className="animate-spin text-rose-600" />
-                       <span className="text-[10px] font-black text-slate-400 tracking-widest">MEMUAT SHIFT DARI SUPABASE...</span>
+                       <span className="text-[10px] font-black text-slate-400 tracking-widest">LOADING SHIFTS FROM SUPABASE...</span>
                      </div>
                    ) : (
                       <div className="space-y-3">
                         {shifts.length > 0 && (
                           <div className="hidden md:flex gap-3 px-4 text-[9px] font-black text-rose-500 uppercase tracking-widest leading-none mb-1">
-                            <span className="w-[100px] text-center">Code Shift</span>
+                            <span className="w-[100px] text-center">Shift Code</span>
                             <span className="flex-1 text-center">Start Time</span>
                             <span className="w-4 shrink-0"></span>
                             <span className="flex-1 text-center">End Time</span>
-                            <span className="w-[70px] text-center">Prioritas</span>
+                            <span className="w-[90px] text-center">Color</span>
+                            <span className="w-[70px] text-center">Priority</span>
+                            <span className="w-[100px] text-center">Cross Day</span>
                             <span className="w-10 shrink-0"></span>
                           </div>
                         )}
@@ -1400,14 +1423,39 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                            <input type="text" placeholder="08:00" className="flex-1 p-2.5 bg-slate-50 border border-slate-100 rounded-xl font-black text-[10px] text-center font-mono" value={s.s} onChange={e => { const newS = [...shifts]; newS[i].s = e.target.value; setShifts(newS); }} />
                            <ArrowLeftRight size={12} className="text-slate-300 shrink-0" />
                            <input type="text" placeholder="17:00" className="flex-1 p-2.5 bg-slate-50 border border-slate-100 rounded-xl font-black text-[10px] text-center font-mono" value={s.e} onChange={e => { const newS = [...shifts]; newS[i].e = e.target.value; setShifts(newS); }} />
+                            <select
+                              className="w-[90px] p-2.5 bg-slate-50 border border-slate-100 rounded-xl font-black text-[10px] text-center focus:outline-none focus:ring-1 focus:ring-rose-500"
+                              value={s.color || "bg-slate-500"}
+                              onChange={e => { const newS = [...shifts]; newS[i].color = e.target.value; setShifts(newS); }}
+                            >
+                              {SHIFT_COLORS_OPTIONS.map(opt => (
+                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                              ))}
+                            </select>
                             <input 
                               type="number" 
                               placeholder="Sort" 
-                              title="Prioritas Sort (Angka lebih kecil tampil terlebih dahulu)"
+                              title="Sort Priority (Smaller numbers appear first)"
                               className="w-[70px] p-2.5 bg-slate-50 border border-slate-100 rounded-xl font-black text-[10px] text-center font-mono focus:outline-none focus:ring-1 focus:ring-rose-500" 
                               value={s.w === undefined ? 1 : s.w} 
                               onChange={e => { const newS = [...shifts]; newS[i].w = parseInt(e.target.value, 10) || 1; setShifts(newS); }} 
                             />
+                            <div className="w-[100px] flex items-center justify-center gap-1.5 px-1 shrink-0">
+                              <input 
+                                type="checkbox" 
+                                id={`crosses_day-${i}`}
+                                className="w-4 h-4 rounded border-slate-300 text-rose-600 focus:ring-rose-500 cursor-pointer"
+                                checked={!!s.crosses_day}
+                                onChange={e => {
+                                  const newS = [...shifts];
+                                  newS[i].crosses_day = e.target.checked;
+                                  setShifts(newS);
+                                }}
+                              />
+                              <label htmlFor={`crosses_day-${i}`} className="text-[9px] font-black tracking-wider text-slate-500 uppercase cursor-pointer select-none">
+                                Yes
+                              </label>
+                            </div>
                            <button className="p-2.5 text-slate-300 hover:text-rose-600 transition-colors" onClick={() => setShifts(shifts.filter((_, idx) => idx !== i))}>
                              <Trash2 size={16} />
                            </button>
@@ -1510,14 +1558,14 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                 {showBulkHol ? (
                   <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-lg animate-in fade-in duration-300">
                     <div className="mb-6">
-                      <label className="text-[9px] font-black text-rose-600 uppercase tracking-widest block mb-2 px-1">Bulk Import Hari Libur</label>
+                      <label className="text-[9px] font-black text-rose-600 uppercase tracking-widest block mb-2 px-1">Bulk Import Holidays</label>
                       <span className="text-[10px] font-bold text-slate-400 block mb-3 leading-normal px-1">
-                        Masukkan hari libur per baris dengan format: <code className="bg-slate-100 px-1.5 py-0.5 rounded text-rose-600 font-mono font-black">YYYY-MM-DD,Nama Hari Libur,Tipe</code> (Tipe opsional: <code className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-mono">public</code> atau <code className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-mono">cuti</code>. Contoh: <code className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-mono">2026-06-05,Cuti Bersama,cuti</code> atau <code className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-mono">2026-08-17,Hari Kemerdekaan RI,public</code>).
+                        Enter holidays per line with the format: <code className="bg-slate-100 px-1.5 py-0.5 rounded text-rose-600 font-mono font-black">YYYY-MM-DD,Holiday Name,Type</code> (Optional type: <code className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-mono">public</code> or <code className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-mono">cuti</code>. Example: <code className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-mono">2026-06-05,Joint Leave,cuti</code> or <code className="bg-slate-100 px-1.5 py-0.5 rounded text-slate-600 font-mono">2026-12-25,Christmas Day,public</code>).
                       </span>
                       <textarea
                         rows={6}
                         className="w-full p-4 bg-slate-50 border border-slate-100 rounded-2xl text-xs font-mono font-black outline-none focus:border-rose-500 placeholder:text-slate-300"
-                        placeholder="Contoh:&#10;2026-08-17,Hari Kemerdekaan RI,public&#10;2026-12-25,Hari Raya Natal,public&#10;2026-04-03,Cuti Bersama Lebaran,cuti"
+                        placeholder="Example:&#10;2026-12-25,Christmas Day,public&#10;2026-06-05,Joint Leave,cuti"
                         value={bulkHolText}
                         onChange={e => setBulkHolText(e.target.value)}
                       />
@@ -1528,14 +1576,14 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                         onClick={() => { setBulkHolText(''); setShowBulkHol(false); }}
                         className="px-6 py-3 border border-slate-200 text-slate-400 hover:text-slate-900 font-black text-[9px] uppercase tracking-widest rounded-xl transition-all"
                       >
-                        Batal
+                        Cancel
                       </button>
                       <button 
                         type="button"
                         onClick={handleBulkImportHolidays}
                         className="px-6 py-3 bg-rose-600 text-white font-black text-[9px] uppercase tracking-widest rounded-xl hover:bg-rose-700 shadow-lg shadow-rose-100 active:scale-95 transition-all flex items-center gap-2"
                       >
-                        <Save size={14} /> Import & Simpan
+                        <Save size={14} /> Import & Save
                       </button>
                     </div>
                   </div>
@@ -1598,7 +1646,7 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Pilih Project:</span>
+                    <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Select Project:</span>
                     <select
                       className="p-2 px-3 bg-white border border-slate-200 rounded-xl text-[10px] font-black text-rose-600 uppercase tracking-widest cursor-pointer focus:ring-1 focus:ring-rose-500 outline-none"
                       value={selectedBreakProject}
@@ -1628,21 +1676,21 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
 
                 <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-lg">
                   <h5 className="m-0 font-black text-xs uppercase tracking-widest text-slate-950 mb-6 flex items-center gap-2.5">
-                    🕢 PENGATURAN JAM BREAK SHIFT PER PROJECT
+                    🕢 SHIFT BREAK TIME SETTINGS PER PROJECT
                   </h5>
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight -mt-4 mb-6 leading-relaxed">
-                    Tentukan waktu istirahat (break times) otomatis untuk masing-masing Shift pada project <span className="text-rose-600 font-black">"{selectedBreakProject}"</span> ini. 
-                    Pisahkan dengan koma jika ada beberapa jam istirahat (Contoh: <code className="bg-slate-100 px-1 py-0.5 rounded text-rose-600 font-mono text-[9px] font-black">11:30, 15:00</code>)
+                    Define automatic break times for each Shift in this project <span className="text-rose-600 font-black">"{selectedBreakProject}"</span>. 
+                    Separate with commas if there are multiple break times (Example: <code className="bg-slate-100 px-1 py-0.5 rounded text-rose-600 font-mono text-[9px] font-black">11:30, 15:00</code>)
                   </p>
 
                   {isLoadingBreakShifts ? (
                     <div className="py-12 flex flex-col items-center justify-center gap-2">
-                      <RefreshCw size={24} className="animate-spin text-rose-600" />
-                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest animate-pulse">Memuat database shift...</span>
+                       <RefreshCw size={24} className="animate-spin text-rose-600" />
+                       <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest animate-pulse">Loading shift database...</span>
                     </div>
                   ) : breakShifts.length === 0 ? (
                     <div className="py-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-center text-slate-400 font-bold text-[10px] uppercase tracking-widest">
-                      Belum ada Shift terdaftar untuk Project ini. Silakan daftarkan shift terlebih dahulu di tab Shift Rules.
+                       No shifts registered for this project yet. Please register shifts first under the Shift Rules tab.
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1685,14 +1733,14 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                 <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-200 shadow-sm flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                   <div>
                     <h4 className="m-0 font-black text-base uppercase tracking-widest flex items-center gap-2.5 text-slate-950">
-                      <Moon size={18} className="text-rose-600 animate-pulse" /> FASTING CYCLES & AUTO-REDUCTION
+                      <Moon size={18} className="text-rose-600 animate-pulse" /> FASTING & SPECIAL EVENT CALENDAR
                     </h4>
                     <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight mt-1.5 px-7">
-                      Atur periode puasa, pemotongan otomatis jam kerja, dan pengurangan waktu istirahat
+                      Set fasting periods, automated work hour deductions, and break time reductions
                     </p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Pilih Project:</span>
+                    <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Select Project:</span>
                     <select
                       className="p-2 px-3 bg-white border border-slate-200 rounded-xl text-[10px] font-black text-rose-600 uppercase tracking-widest cursor-pointer focus:ring-1 focus:ring-rose-500 outline-none"
                       value={selectedFastingProject}
@@ -1708,10 +1756,10 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                 {/* Periode Puasa (Fasting Calendar Periods) */}
                 <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-lg">
                   <h5 className="m-0 font-black text-xs uppercase tracking-widest text-slate-950 mb-6 flex items-center gap-2">
-                    <Calendar size={16} className="text-rose-600" /> 📅 TAMBAH PERIODE PUASA / EVENT KHUSUS
+                    <Calendar size={16} className="text-rose-600" /> 📅 ADD FASTING PERIOD / SPECIAL EVENT
                   </h5>
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight -mt-4 mb-6 leading-relaxed">
-                    Daftarkan rentang tanggal untuk mengaktifkan pemotongan jam kerja otomatis dan pengurangan istirahat di dashboard:
+                    Register date ranges to enable automatic work hour deductions and break reductions in the dashboard:
                   </p>
 
                   <div className="flex flex-col sm:flex-row gap-4 items-end mb-8 bg-slate-50 p-6 rounded-2xl border border-slate-100">
@@ -1736,28 +1784,28 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                     <button 
                       onClick={() => {
                         if (!newPuasaStart || !newPuasaEnd) {
-                          alert("Pilih tanggal mulai & selesai terlebih dahulu!");
+                          alert("Select start and end date first!");
                           return;
                         }
                         if (new Date(newPuasaStart) > new Date(newPuasaEnd)) {
-                          alert("Tanggal mulai tidak boleh melebihi tanggal selesai!");
+                          alert("Start date cannot exceed end date!");
                           return;
                         }
                         setPuasa([...puasa, { start: newPuasaStart, end: newPuasaEnd }]);
                         setNewPuasaStart('');
                         setNewPuasaEnd('');
-                        showStatus("Periode event ditambahkan! Silakan klik 'Commit Configuration' untuk menyimpan permanen. ✅");
+                        showStatus("Event period added! Please click 'Commit Configuration' to save permanently. ✅");
                       }}
                       className="px-6 py-3.5 bg-rose-600 hover:bg-rose-700 text-white font-black text-[10px] uppercase tracking-widest rounded-xl transition-all flex items-center gap-2 shadow-md hover:scale-105"
                     >
-                      <Plus size={15} /> Tambah Periode
+                      <Plus size={15} /> Add Period
                     </button>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {puasa.length === 0 ? (
                       <div className="sm:col-span-2 py-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-center text-slate-400 font-bold text-[10px] uppercase tracking-widest">
-                        Belum ada periode puasa terdaftar. Buat di atas untuk mengaktifkan pemotongan jam kerja otomatis.
+                        No fasting periods registered. Create above to enable automatic work hours reductions.
                       </div>
                     ) : (
                       puasa.map((p, i) => (
@@ -1765,14 +1813,14 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                           <Moon size={15} className="text-rose-600 animate-pulse shrink-0" />
                           <div className="font-mono text-xs font-black text-slate-800 flex-1 flex items-center gap-2">
                             <span>{p.start}</span>
-                            <span className="text-slate-300 font-sans">s/d</span>
+                            <span className="text-slate-300 font-sans">to</span>
                             <span>{p.end}</span>
                           </div>
                           <button 
                             className="text-slate-300 hover:text-rose-600 transition-colors p-1 rounded-lg hover:bg-slate-100" 
                             onClick={() => {
                               setPuasa(puasa.filter((_, idx) => idx !== i));
-                              showStatus("Periode puasa dihapus. Klik 'Commit Configuration' untuk menyimpan.");
+                              showStatus("Fasting period deleted. Click 'Commit Configuration' to save.");
                             }}
                           >
                             <Trash2 size={16} />
@@ -1783,66 +1831,66 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                   </div>
                 </div>
 
-                {/* Aturan Pemotongan Otomatis (Auto-Reduction Calculators) */}
+                {/* Auto-Reduction Settings (Auto-Reduction Calculators) */}
                 <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-lg">
                   <h5 className="m-0 font-black text-xs uppercase tracking-widest text-slate-950 mb-6 flex items-center gap-2">
-                    <Zap size={16} className="text-rose-600" /> ⚡ KALKULATOR PEMOTONGAN JAM KERJA & ISTIRAHAT OTOMATIS
+                    <Zap size={16} className="text-rose-600" /> ⚡ AUTOMATIC WORK HOURS & BREAK REDUCTION CALCULATOR
                   </h5>
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight -mt-4 mb-6 leading-relaxed">
-                    Tentukan parameter di bawah untuk memotong jam kerja semua shift dan menyusutkan waktu istirahat secara instan:
+                    Define constraints below to shorten work hours for all shifts and reduce break times instantly:
                   </p>
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6 items-end bg-slate-50 p-6 rounded-2xl border border-slate-100">
                     <div>
-                      <label className="text-[9px] font-black text-rose-600 uppercase tracking-widest block mb-2">Potong Jam Kerja (MENIT)</label>
+                      <label className="text-[9px] font-black text-rose-600 uppercase tracking-widest block mb-2">Shorten Work Hours (MINUTES)</label>
                       <input 
                         type="number" 
                         value={autoReduceMinutes} 
                         onChange={e => setAutoReduceMinutes(Math.max(0, parseInt(e.target.value) || 0))}
                         className="w-full p-4.5 bg-white border border-slate-200 rounded-xl text-xs font-black outline-none focus:border-rose-500 font-mono" 
-                        placeholder="contoh: 60"
+                        placeholder="e.g., 60"
                       />
-                      <span className="text-[8px] text-slate-400 font-bold uppercase tracking-tight mt-1.5 block">Jam Kerja berkurang (ex: Selesai 1 jam lebih awal)</span>
+                      <span className="text-[8px] text-slate-400 font-bold uppercase tracking-tight mt-1.5 block">Work hours reduced (e.g., Finish 1 hour earlier)</span>
                     </div>
 
                     <div>
-                      <label className="text-[9px] font-black text-rose-600 uppercase tracking-widest block mb-2">Durasi Istirahat Puasa (MENIT)</label>
+                      <label className="text-[9px] font-black text-rose-600 uppercase tracking-widest block mb-2">Fasting Break Duration (MINUTES)</label>
                       <input 
                         type="number" 
                         value={autoReduceBreakMinutes} 
                         onChange={e => setAutoReduceBreakMinutes(Math.max(0, parseInt(e.target.value) || 0))}
                         className="w-full p-4.5 bg-white border border-slate-200 rounded-xl text-xs font-black outline-none focus:border-rose-500 font-mono" 
-                        placeholder="contoh: 30"
+                        placeholder="e.g., 30"
                       />
-                      <span className="text-[8px] text-slate-400 font-bold uppercase tracking-tight mt-1.5 block">Jam istirahat dipotong ke angka ini (ex: 30 menit)</span>
+                      <span className="text-[8px] text-slate-400 font-bold uppercase tracking-tight mt-1.5 block">Break hours reduced to this limit (e.g., 30 minutes)</span>
                     </div>
 
                     <button
                       onClick={handleAutoApplyFastingRules}
                       className="w-full p-4 bg-slate-950 text-white hover:bg-black font-black text-[10px] uppercase tracking-widest rounded-xl transition-all flex items-center justify-center gap-2 shadow-lg hover:scale-[1.02] border border-slate-800"
                     >
-                      <Zap size={14} className="text-yellow-400 fill-yellow-400" /> Terapkan Otomatis
+                      <Zap size={14} className="text-yellow-400 fill-yellow-400" /> Auto Apply
                     </button>
                   </div>
                 </div>
 
-                {/* Pengaturan Jam Kerja & Istirahat Per Shift */}
+                {/* Work Hours & Break Settings Per Shift */}
                 <div className="bg-white p-8 rounded-[2.5rem] border border-slate-200 shadow-lg">
                   <h5 className="m-0 font-black text-xs uppercase tracking-widest text-slate-950 mb-4 flex items-center gap-2">
-                    <Clock size={16} className="text-rose-600 animate-pulse" /> 🕜 DETAIL JAM KERJA & ISTIRAHAT SHIFT PUASA (PROJECT: {selectedFastingProject})
+                    <Clock size={16} className="text-rose-600 animate-pulse" /> 🕜 FASTING SHIFT WORK HOURS & BREAK DETAILS (PROJECT: {selectedFastingProject})
                   </h5>
                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight mb-8 leading-relaxed">
-                    Daftar jam kerja khusus & durasi istirahat (dalam menit) untuk masing-masing shift selama periode puasa aktif. Anda bisa menyunting manual atau memakai tombol re-kalkulasi di atas.
+                    List of special work hours & break durations (in minutes) for each shift during active fasting periods. You can edit them manually or use the recalculation button above.
                   </p>
 
                   {isLoadingFastingShifts ? (
                     <div className="py-12 flex flex-col items-center justify-center gap-2">
                       <RefreshCw size={24} className="animate-spin text-rose-600" />
-                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest animate-pulse">Memuat database shift...</span>
+                      <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest animate-pulse">Loading shift database...</span>
                     </div>
                   ) : fastingProjectShifts.length === 0 ? (
                     <div className="py-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200 text-center text-slate-400 font-bold text-[10px] uppercase tracking-widest">
-                      Belum ada Shift terdaftar untuk Project ini. Silakan daftarkan shift terlebih dahulu di tab Shift Rules.
+                      No shifts registered for this project yet. Please register shifts first under the Shift Rules tab.
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 gap-4">
@@ -1909,8 +1957,8 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
 
                               <div>
                                 <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-1">
-                                  Istirahat Puasa (MENIT)
-                                  <span className="text-rose-600 ml-1">(-Istirahat)</span>
+                                  Fasting Break (MINUTES)
+                                  <span className="text-rose-600 ml-1">(-Break)</span>
                                 </label>
                                 <input 
                                   type="number" 
@@ -2031,10 +2079,10 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
               <div>
                 <h5 className="text-xs font-black uppercase tracking-wider text-indigo-950 flex items-center gap-2">
                   <Database size={18} className="text-indigo-600 animate-pulse" />
-                  INSTALASI TABEL OTOMATIS (ONE-CLICK DATABASE INITIALIZER)
+                  AUTOMATIC TABLE INSTALLATION (ONE-CLICK DATABASE INITIALIZER)
                 </h5>
                 <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mt-1">
-                  Metode aman untuk mengonstruksikan seluruh skema tabel workforce secara instan di Supabase
+                  Safe method to construct the entire workforce database schemas instantly in Supabase
                 </p>
               </div>
             </div>
@@ -2052,13 +2100,13 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                   className="w-full p-4.5 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 text-xs font-black outline-none focus:border-indigo-500 transition-all font-mono placeholder:text-slate-300"
                 />
                 <p className="text-[8.5px] text-slate-400 font-bold leading-normal mt-2.5 px-1 uppercase tracking-tight">
-                  TIPS: Anda dapat menyalin URI ini dari dashboard Supabase Anda di <span className="text-indigo-600 font-black">Project Settings &gt; Database &gt; Connection string &gt; URI</span> (Gunakan mode Session Pooler atau Transaction Pooler dan ganti password Anda).
+                  TIPS: You can copy this URI from your Supabase dashboard at <span className="text-indigo-600 font-black">Project Settings &gt; Database &gt; Connection string &gt; URI</span> (Use Session Pooler or Transaction Pooler mode and replace your password).
                 </p>
               </div>
 
               {initResult.status !== 'idle' && (
                 <div className={`p-4.5 rounded-2xl border text-[10px] font-black uppercase tracking-wider leading-relaxed ${initResult.status === 'success' ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700' : 'bg-rose-500/10 border-rose-500/30 text-rose-600'}`}>
-                  {initResult.status === 'success' ? 'Selesai: ' : 'Kesalahan: '}
+                  {initResult.status === 'success' ? 'Completed: ' : 'Error: '}
                   {initResult.message}
                 </div>
               )}
@@ -2070,7 +2118,7 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                   className="w-full sm:w-auto px-6 py-4 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2.5 transition-all bg-indigo-600 text-white hover:bg-indigo-700 active:scale-95 disabled:opacity-50 shadow-md shadow-indigo-100 cursor-pointer text-center"
                 >
                   {isInitializingTables ? <RefreshCw size={14} className="animate-spin" /> : <Database size={14} />}
-                  {isInitializingTables ? 'Memproses Migrasi...' : 'Jalankan Inisialisasi Tabel Supabase'}
+                  {isInitializingTables ? 'Processing Migration...' : 'Run Supabase Table Initialization'}
                 </button>
               </div>
             </div>
@@ -2085,13 +2133,13 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                   SUPABASE SQL EDITOR SCHEMAS (MIGRATION STACK)
                 </h5>
                 <p className="text-slate-400 text-[9px] font-bold uppercase tracking-widest mt-1">
-                  Salin seluruh query SQL di bawah ini untuk membuat tabel 'workforce', 'interval_requirements', dan 'master_shifts' secara instan
+                  Copy the entire SQL query below to create the 'workforce', 'interval_requirements', and 'master_shifts' tables instantly
                 </p>
               </div>
               <button
                 onClick={() => {
-                  const sqlText = `-- SQL Schema untuk 'workforce', 'interval_requirements', 'roster_schedule', dan 'master_shifts' pada Supabase\n` +
-                    `-- Dashboard Supabase -> SQL Editor -> New Query -> Tempel (Paste) -> Run\n\n` +
+                  const sqlText = `-- SQL Schema for 'workforce', 'interval_requirements', 'roster_schedule', and 'master_shifts' on Supabase\n` +
+                    `-- Supabase Dashboard -> SQL Editor -> New Query -> Paste -> Run\n\n` +
                     `-- 1. Buat Tabel 'workforce'\n` +
                     `CREATE TABLE IF NOT EXISTS public.workforce (\n` +
                     `    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,\n` +
@@ -2180,11 +2228,11 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                     `CREATE POLICY "Allow public update portal_settings" ON public.portal_settings FOR UPDATE USING (true) WITH CHECK (true);\n` +
                     `CREATE POLICY "Allow public delete portal_settings" ON public.portal_settings FOR DELETE USING (true);`;
                   navigator.clipboard.writeText(sqlText);
-                  alert("SQL Schema berhasil disalin ke clipboard! 👍");
+                  alert("SQL Schema successfully copied to clipboard! 👍");
                 }}
                 className="px-4 py-2 bg-[#6366f1] text-white text-[9px] font-black uppercase tracking-widest rounded-xl hover:bg-[#4f46e5] transition-colors shadow-md flex items-center gap-1.5"
               >
-                <Database size={12} /> Salin SQL Script
+                <Database size={12} /> Copy SQL Script
               </button>
             </div>
 
@@ -2301,7 +2349,7 @@ CREATE POLICY "Allow public delete portal_settings" ON public.portal_settings FO
             <div className="p-4 bg-sky-50 border border-sky-100 rounded-2xl flex items-start gap-3">
               <span className="text-sky-600 font-bold shrink-0 mt-0.5 font-sans">💡 Step:</span>
               <p className="text-[10px] text-sky-950 font-bold uppercase tracking-wider leading-relaxed">
-                Silakan buka dashboard Supabase Anda di <a href="https://supabase.com" target="_blank" rel="noopener noreferrer" className="underline font-black hover:text-sky-700">supabase.com</a>, masuk ke proyek yang aktif, pilih menu <strong>SQL Editor</strong>, klik <strong>"New Query"</strong>, tempel (paste) script SQL di atas seluruhnya, dan tekan tombol <strong>"Run"</strong>. Data tabular interval otomatis dapat diakses dan disimpan secara cloud!
+                Please open your Supabase dashboard at <a href="https://supabase.com" target="_blank" rel="noopener noreferrer" className="underline font-black hover:text-sky-700">supabase.com</a>, enter your active project, select the <strong>SQL Editor</strong> menu, click <strong>"New Query"</strong>, paste the above SQL script entirely, and press the <strong>"Run"</strong> button. The automation interval tabular data will be cloud-accessible and saved instantly!
               </p>
             </div>
           </div>

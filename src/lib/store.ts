@@ -6,7 +6,7 @@ interface Settings {
   apiKey: string;
   adhId: string;
   channels: string[];
-  shifts: Record<string, { s: string; e: string; w: number }>;
+  shifts: Record<string, { s: string; e: string; w: number; color?: string }>;
   holidays: Record<string, string>;
   autoBreak: Record<string, string[]>;
   fridayBreak: {
