@@ -551,7 +551,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
       return r;
     }));
     setCalendarContextMenu(null);
-    showNotification(`Jadwal tanggal ${dateStr} diatur ke ${code}! 🗓️`, "success");
+    showNotification(`Schedule tanggal ${dateStr} diatur ke ${code}! 🗓️`, "success");
   };
 
   const handleOpenDurationModalByActivity = (agentId: string, slotIdx: number, activityCode: string) => {
@@ -1317,7 +1317,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
         site: "Jakarta"
       });
     } catch (err: any) {
-      showNotification("Gagal menambahkan karyawan: " + err.message, "error");
+      showNotification("Failed to add employee: " + err.message, "error");
     } finally {
       setDbLoading(false);
     }
@@ -1326,13 +1326,13 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
   // Handler for Bulk Add
   const handleBulkSubmit = async () => {
     if (!bulkInput.trim()) {
-      showNotification("Silakan masukkan nama-nama terlebih dahulu.", "error");
+      showNotification("Please enter names first.", "error");
       return;
     }
     const lines = bulkInput.split("\n").map(l => l.trim()).filter(Boolean);
     if (lines.length === 0) return;
     setDbLoading(true);
-    setBulkProgress(`Memproses 0 / ${lines.length} karyawan...`);
+    setBulkProgress(`Processing 0 / ${lines.length} employees...`);
     let addedCount = 0;
     const failures = [];
     const newList = [...dbEmployees];
@@ -1412,7 +1412,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
         }
         newList.unshift(created);
         addedCount++;
-        setBulkProgress(`Memproses ${addedCount} / ${lines.length} karyawan...`);
+        setBulkProgress(`Processing ${addedCount} / ${lines.length} employees...`);
       } catch (err: any) {
         console.error("Bulk add row error:", err);
         failures.push(line);
@@ -1425,9 +1425,9 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
     setBulkProgress(null);
     await loadDbEmployees();
     if (failures.length > 0) {
-      showNotification(`Berhasil: ${addedCount}. Gagal: ${failures.length} baris.`, "info");
+      showNotification(`Success: ${addedCount}. Failed: ${failures.length} baris.`, "info");
     } else {
-      showNotification(`Berhasil menambahkan ${addedCount} karyawan secara bulk!`, "success");
+      showNotification(`Successfully added ${addedCount} employees in bulk!`, "success");
     }
     setDbLoading(false);
   };
@@ -1987,7 +1987,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                             </span>
                             {Object.keys(agent.activities).length > 0 && (
                               <button
-                                title="Hapus Break Hari Ini"
+                                title="Delete Break Today"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   handleClearBreaks(agent.id);
@@ -2048,7 +2048,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                                 </span>
                                 {isWithinShift && (
                                   <span className="text-[#818cf8] font-black text-[7px] tracking-widest mt-0.5 uppercase">
-                                    Klik Kanan untuk Kelola
+                                    Klik Kanan for Kelola
                                   </span>
                                 )}
                               </div>
@@ -2123,7 +2123,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                   BREAK MANAGER
                 </h3>
                 <p className="text-gray-400 text-[10px] font-bold uppercase tracking-wider mt-1.5 leading-relaxed">
-                  Kelola penjadwalan istirahat otomatis (Auto Break) & pembersihan massal untuk project <span className="text-rose-600 font-extrabold">"{selectedProject}"</span>.
+                  Manage auto break scheduling & bulk clearing for project <span className="text-rose-600 font-extrabold">"{selectedProject}"</span>.
                 </p>
               </div>
 
@@ -2143,7 +2143,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                   className={`flex-1 py-2.5 rounded-lg text-[9px] font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${breakModalTab === 'remove' ? 'bg-white text-slate-900 shadow-sm font-black' : 'text-slate-400 hover:text-slate-700'}`}
                 >
                   <Trash2 size={12} />
-                  Hapus Istirahat
+                  Delete Istirahat
                 </button>
               </div>
 
@@ -2154,7 +2154,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                     <div>
                       <p className="text-[10px] font-black uppercase tracking-wider text-amber-900">Penjelasan Auto Break</p>
                       <p className="text-[9px] text-amber-700 font-bold uppercase mt-1 leading-normal font-sans">
-                        Sistem akan menganalisis data shift agent aktif pada tanggal terpilih (<span className="text-slate-950 font-black">{selectedDate}</span>) dan secara otomatis menempatkan 4 slot istirahat (LB - 1 jam) per agent di waktu terbaik demi kelancaran operasional.
+                        The system will analyze active agent shift data on the selected date (<span className="text-slate-950 font-black">{selectedDate}</span>) and automatically place 4 break slots (LB - 1 hr) per agent at optimal times.
                       </p>
                     </div>
                   </div>
@@ -2165,7 +2165,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                       <span className="text-slate-900 font-black">{selectedProject}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span>Tanggal Terpilih:</span>
+                      <span>Selected Date:</span>
                       <span className="text-slate-900 font-black">{selectedDate}</span>
                     </div>
                     <div className="flex justify-between">
@@ -2180,7 +2180,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                       onClick={() => setShowBulkRemoveModal(false)}
                       className="flex-1 py-3 border border-slate-200 hover:bg-slate-50 text-slate-500 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors flex items-center justify-center gap-2"
                     >
-                      Batal
+                      Cancel
                     </button>
                     <button
                       type="button"
@@ -2191,7 +2191,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                       className="flex-1 py-3 bg-slate-950 hover:bg-black text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg shadow-slate-200"
                     >
                       <Coffee size={13} />
-                      Jadwalkan Otomatis
+                      Schedulekan Otomatis
                     </button>
                   </div>
                 </div>
@@ -2202,7 +2202,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                   <div className="space-y-4">
                     {/* Start Date */}
                     <div className="space-y-1.5 font-sans">
-                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block">Tanggal Mulai</label>
+                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block">Start Date</label>
                       <input 
                         type="date" 
                         value={bulkRemoveStart} 
@@ -2213,7 +2213,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
 
                     {/* End Date */}
                     <div className="space-y-1.5 font-sans">
-                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block">Tanggal Selesai</label>
+                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block">End Date</label>
                       <input 
                         type="date" 
                         value={bulkRemoveEnd} 
@@ -2231,7 +2231,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                           onClick={() => setBulkRemoveTarget("all")}
                           className={`py-2.5 px-3 text-[9px] font-black uppercase tracking-wider rounded-xl transition-all border ${bulkRemoveTarget === "all" ? "bg-black text-white border-black" : "bg-slate-50 text-slate-500 border-slate-100 hover:bg-slate-100"}`}
                         >
-                          Semua Agent ({combinedAgents.filter(a => matchProject(a.project, selectedProject)).length})
+                          All Agent ({combinedAgents.filter(a => matchProject(a.project, selectedProject)).length})
                         </button>
                         <button
                           type="button"
@@ -2251,7 +2251,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                       onClick={() => setShowBulkRemoveModal(false)}
                       className="flex-1 py-3 border border-slate-200 hover:bg-slate-50 text-slate-500 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors flex items-center justify-center gap-2"
                     >
-                      Batal
+                      Cancel
                     </button>
                     <button
                       type="button"
@@ -2259,7 +2259,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                       className="flex-1 py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg shadow-rose-100"
                     >
                       <Trash2 size={13} />
-                      Hapus Istirahat
+                      Delete Istirahat
                     </button>
                   </div>
                 </div>
@@ -2291,7 +2291,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
             }}
           >
             <div className="px-3 py-1.5 text-gray-400 font-extrabold text-[9px] tracking-widest border-b border-gray-100 uppercase">
-              Aktivitas: {intervals[cellContextMenu.slotIdx]}
+              Activity: {intervals[cellContextMenu.slotIdx]}
             </div>
             
             {/* List activities */}
@@ -2334,7 +2334,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                     className="w-full text-left px-3 py-2 rounded-xl hover:bg-rose-50 text-rose-600 transition-colors flex items-center gap-2 border-t border-gray-100 mt-1 font-bold uppercase tracking-wider"
                   >
                     <Trash2 size={12} className="text-rose-500 shrink-0" />
-                    Hapus Aktivitas
+                    Delete Activity
                   </button>
                 );
               }
@@ -2369,14 +2369,14 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                 <div className="flex items-center gap-2 mb-1">
                   <span className={`w-3 h-3 rounded-full ${getActivityDef(durationModalData.activityCode, selectedProject)?.color} inline-block shadow-sm animate-pulse`} />
                   <span className="text-[10px] font-black uppercase text-rose-600 tracking-widest font-sans">
-                    Atur Durasi Aktivitas
+                    Atur Durasi Activity
                   </span>
                 </div>
                 <h3 className="text-base font-black text-black uppercase tracking-wider font-sans mt-0.5">
                   {getActivityDef(durationModalData.activityCode, selectedProject)?.label} ({durationModalData.activityCode})
                 </h3>
                 <p className="text-gray-400 text-[10px] font-bold uppercase tracking-wider mt-1 leading-relaxed">
-                  Pilih durasi aktivitas yang ingin dijadwalkan dari waktu mulai <span className="text-slate-900 font-extrabold">{intervals[durationModalData.slotIdx]}</span>.
+                  Select activity duration to schedule starting from <span className="text-slate-900 font-extrabold">{intervals[durationModalData.slotIdx]}</span>.
                 </p>
               </div>
 
@@ -2386,15 +2386,15 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                 const activitySetting = settings.activities?.[projKey]?.[durationModalData.activityCode];
                 if (!activitySetting) return null;
                 
-                let durText = "15 Menit (1 Slot)";
-                if (activitySetting.duration === '2') durText = "30 Menit (2 Slot)";
-                if (activitySetting.duration === '4') durText = "1 Jam (4 Slot)";
-                if (activitySetting.duration === 'full') durText = "Full Day / Sisa Shift";
+                let durText = "15 Minutes (1 Slot)";
+                if (activitySetting.duration === '2') durText = "30 Minutes (2 Slot)";
+                if (activitySetting.duration === '4') durText = "1 4 Hour (4 Slots)";
+                if (activitySetting.duration === 'full') durText = "Full Day / Remaining Shift";
                 if (activitySetting.duration === 'custom') durText = "Kustom / Manual";
 
                 return (
                   <div className="bg-slate-50 border border-slate-100 p-3.5 rounded-2xl flex items-center justify-between font-sans">
-                    <span className="text-[9px] font-black uppercase text-slate-500 tracking-wider">Durasi Default Project:</span>
+                    <span className="text-[9px] font-black uppercase text-slate-500 tracking-wider">Project Default Duration:</span>
                     <span className="text-[9px] font-black uppercase text-rose-600 bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-100">
                       {durText}
                     </span>
@@ -2404,16 +2404,16 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
 
               {/* Presets Grid */}
               <div className="space-y-2">
-                <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1">Daftar Pilihan Cepat</label>
+                <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-1">Daftar Selectan Cepat</label>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-2 font-sans">
                   {[
-                    { label: "15 Menit", slots: 1 },
-                    { label: "30 Menit", slots: 2 },
-                    { label: "45 Menit", slots: 3 },
-                    { label: "1 Jam", slots: 4 },
-                    { label: "2 Jam", slots: 8 },
+                    { label: "15 Minutes", slots: 1 },
+                    { label: "30 Minutes", slots: 2 },
+                    { label: "45 Minutes", slots: 3 },
+                    { label: "1 Hour", slots: 4 },
+                    { label: "2 Hour", slots: 8 },
                     { 
-                      label: "Sisa Shift", 
+                      label: "Remaining Shift", 
                       slots: (() => {
                         const targetAgent = combinedAgents.find(a => a.id === durationModalData.agentId);
                         if (targetAgent) {
@@ -2456,9 +2456,9 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
               {/* Adjuster / Number Input */}
               <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex items-center justify-between font-sans">
                 <div>
-                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block font-sans">Atur Manual</label>
+                  <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block font-sans">Manual Setup</label>
                   <span className="text-[11px] font-black text-black block mt-0.5 uppercase">
-                    Total: {customSlots * 15} Menit
+                    Total: {customSlots * 15} Minutes
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -2489,7 +2489,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                   onClick={() => setDurationModalData(null)}
                   className="flex-1 py-3 border border-slate-200 hover:bg-slate-50 text-slate-500 rounded-xl text-[10px] font-black uppercase tracking-widest transition-colors flex items-center justify-center"
                 >
-                  Batal
+                  Cancel
                 </button>
                 <button
                   type="button"
@@ -2501,7 +2501,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                   )}
                   className="flex-1 py-3 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-lg shadow-rose-100"
                 >
-                  Simpan Aktivitas
+                  Save Activity
                 </button>
               </div>
             </motion.div>
@@ -2838,7 +2838,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
           }
           if (Object.values(weekCounts).some(count => count > 6)) return false;
 
-          // 4. Max consecutive special shifts (nyebrang hari / overnight) <= 3
+          // 4. Max consecutive special shifts (nyebrang Days / overnight) <= 3
           let maxConsecSpecial = 0;
           let currentConsecSpecial = 0;
           for (let i = 0; i < days.length; i++) {
@@ -3961,7 +3961,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                   const topAgent = currentAssigned[0];
                   const topAgentWorkDays = Object.values(topAgent.roster).filter(s => s !== 'OFF').length;
                   
-                  // Rule: jika hari kerja masih kurang boleh surplus
+                  // Rule: jika Days kerja masih kurang boleh surplus
                   // If even the most-worked assigned agent is at or below quota, do NOT remove them!
                   if (topAgentWorkDays <= maxWorkingDaysPerAgent) break;
                   
@@ -4318,7 +4318,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                  {isGeneratingRoster ? (
                    <><div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Sedang Kalkulasi...</>
                  ) : (
-                   <><CalendarIcon size={14}/> Buat Schedule</>
+                   <><CalendarIcon size={14}/> Generate Schedule</>
                  )}
                </button>
                {generatedRoster.length > 0 && (
@@ -4326,7 +4326,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                    onClick={saveRosterSchedule}
                    className="bg-indigo-600 text-white hover:bg-indigo-700 px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg transition-all flex items-center gap-2"
                  >
-                   <Database size={14} /> Simpan Schedule
+                   <Database size={14} /> Save Schedule
                  </button>
                )}
              </div>
@@ -4336,7 +4336,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
         {generatedRoster.length > 0 && (
           <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col animate-in fade-in duration-500">
             <div className="bg-slate-50 px-6 py-3 border-b border-gray-100 flex items-center justify-end">
-               <span className="text-xs font-bold text-slate-500">Klik kanan pada nama Agent untuk <span className="text-rose-500 font-black">Force OFF</span>. (Klik ulang Buat Schedule setelahnya)</span>
+               <span className="text-xs font-bold text-slate-500">Right click on Agent name to <span className="text-rose-500 font-bold">Force OFF</span>. (Click Generate Schedule again)</span>
             </div>
             <div className="overflow-x-auto relative">
               <table className="border-separate border-spacing-0 table-fixed min-w-max w-full">
@@ -4417,12 +4417,12 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                     })}
                     <th className="px-3 py-3 border-b border-gray-200 border-r border-gray-50/50 text-center w-[90px] min-w-[90px] max-w-[90px] bg-indigo-50/50">
                       <span className="block text-[9px] font-black uppercase tracking-widest text-[#6366f1]">
-                        Hari Kerja
+                        Work Days
                       </span>
                     </th>
                     <th className="px-3 py-3 border-b border-gray-200 border-r border-gray-50/50 text-center w-[90px] min-w-[90px] max-w-[90px] bg-rose-50/50">
                       <span className="block text-[9px] font-black uppercase tracking-widest text-rose-600">
-                        Hari Libur
+                        Off Days
                       </span>
                     </th>
                   </tr>
@@ -4464,7 +4464,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                                 }));
                             }
                           }}
-                          title="Klik Kanan untuk Paksa OFF Jadwal (Force Off)"
+                          title="Klik Kanan for Paksa OFF Schedule (Force Off)"
                         >
                           <div className="flex flex-col w-full max-w-full overflow-hidden">
                             <div className="flex items-center gap-1.5 w-full justify-between">
@@ -4561,10 +4561,10 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                           return (
                             <>
                               <td className="p-1 border-r border-gray-50/50 text-center bg-indigo-50/10 font-bold w-[90px] min-w-[90px] max-w-[90px]">
-                                <span className="text-[11px] font-black text-slate-800">{workDays} Hari</span>
+                                <span className="text-[11px] font-black text-slate-800">{workDays} Days</span>
                               </td>
                               <td className="p-1 border-r border-gray-50/50 text-center bg-rose-50/10 font-bold w-[90px] min-w-[90px] max-w-[90px]">
-                                <span className="text-[11px] font-black text-rose-500">{offDays} Hari</span>
+                                <span className="text-[11px] font-black text-rose-500">{offDays} Days</span>
                               </td>
                             </>
                           );
@@ -4715,7 +4715,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
              <CalendarIcon className="w-12 h-12 text-slate-300 mb-4" />
              <h4 className="text-sm font-black text-slate-900 uppercase tracking-widest">Belum Ada Roster</h4>
              <p className="text-[10px] font-medium text-slate-500 mt-2 max-w-sm uppercase tracking-widest leading-relaxed">
-               Silakan pilih rentang tanggal dan klik "Buat Schedule" untuk mengatur jadwal roster karyawan otomatis berdasarkan komposisi required FTE.
+               Please select a date range and click 'Generate Schedule' to auto-schedule based on required FTE.
              </p>
           </div>
         )}
@@ -5020,7 +5020,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
             <div>
               <h3 className="text-xl sm:text-2xl font-black text-black tracking-tight uppercase">Agent Required Capacity Grid</h3>
               <p className="text-neutral-gray text-[10px] sm:text-[11px] font-black uppercase tracking-[0.25em] mt-1">
-                Atur kebutuhan jumlah agent sesuai interval & tanggal
+                Adjust agent requirement count per interval & date
               </p>
             </div>
           </div>
@@ -5039,7 +5039,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                 </>
               ) : (
                 <>
-                  <Database size={12} /> Simpan ke Supabase
+                  <Database size={12} /> Save ke Supabase
                 </>
               )}
             </button>
@@ -5055,7 +5055,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
               <div className="space-y-1">
                 <h4 className="text-xs font-black uppercase tracking-wider">Database Diperlukan Upgrade Kolom 'project'</h4>
                 <p className="text-[11px] leading-relaxed opacity-90 font-medium">
-                  Supabase mendeteksi bahwa tabel <code>interval_requirements</code> pada database Anda kemungkinan dibuat menggunakan format lama dan belum memiliki kolom <code>project</code>. Tekan tombol di bawah ini untuk menyalin skrip SQL migrasi, lalu jalankan di **SQL Editor Supabase** Anda untuk mengaktifkan pemisahan dan penyimpanan data antar Proyek (Project A, B, dst) secara instan!
+                  Supabase mendeteksi bahwa tabel <code>interval_requirements</code> pada database Anda kemungkinan dibuat menggunakan format lama dan belum memiliki kolom <code>project</code>. Tekan tombol di bawah ini for menyalin skrip SQL migrasi, lalu jalankan di **SQL Editor Supabase** Anda for mengaktifkan pemisahan dan penyimpanan data antar Proyek (Project A, B, dst) secara instan!
                 </p>
               </div>
             </div>
@@ -5071,7 +5071,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                   `ALTER TABLE public.roster_schedule DROP CONSTRAINT IF EXISTS unique_roster_record;\n` +
                   `ALTER TABLE public.roster_schedule ADD CONSTRAINT unique_roster_record UNIQUE (date, emp_id, project);\n`;
                 navigator.clipboard.writeText(sql);
-                showNotification("Skrip SQL Migrasi disalin ke clipboard! 👍 Silakan tempelkan & run di SQL Editor Supabase Anda.", "success");
+                showNotification("Skrip SQL Migrasi dicopy ke clipboard! 👍 Please pastekan & run di SQL Editor Supabase Anda.", "success");
               }}
               className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-[9px] font-black uppercase tracking-widest rounded-xl transition-all shadow-sm flex items-center gap-1.5 active:scale-95 duration-100"
             >
@@ -5084,7 +5084,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
         <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Date Picker Range */}
           <div className="space-y-1.5 lg:col-span-2">
-            <label className="text-[9px] font-black text-neutral-gray uppercase tracking-widest block font-sans">Pilih Periode Tanggal (Maks 31 Hari)</label>
+            <label className="text-[9px] font-black text-neutral-gray uppercase tracking-widest block font-sans">Select Date Period (Max 31 Days)</label>
             <div className="grid grid-cols-2 gap-2">
               <div className="relative">
                 <CalendarIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-neutral-gray" />
@@ -5117,7 +5117,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                   onClick={() => setHistIntervalType(type)}
                   className={`py-1.5 text-[9px] font-black uppercase tracking-widest rounded-lg transition-colors ${histIntervalType === type ? 'bg-white shadow-sm text-black border border-gray-100' : 'text-neutral-gray hover:text-black'}`}
                 >
-                  {type === "15m" ? "15m" : type === "30m" ? "30m" : "1 Jam"}
+                  {type === "15m" ? "15m" : type === "30m" ? "30m" : "1 Hour"}
                 </button>
               ))}
             </div>
@@ -5137,7 +5137,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
               <button
                 onClick={clearAllRequirements}
                 className="w-full py-2 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all duration-250 flex items-center justify-center gap-1 border bg-rose-50 hover:bg-rose-100 text-rose-700 border-rose-100"
-                title="Batal atau kosongkan semua data interval"
+                title="Cancel atau kosongkan semua data interval"
               >
                 Reset 0
               </button>
@@ -5149,21 +5149,21 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
         <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
           <div className="flex items-center justify-between border-b border-gray-50 pb-3">
             <div>
-              <h4 className="text-xs font-black uppercase tracking-wider text-black">Bulk Import Data Interval</h4>
+              <h4 className="text-xs font-black uppercase tracking-wider text-black">Bulk Import Interval Data</h4>
               <p className="text-neutral-gray text-[9px] font-black uppercase tracking-widest mt-1">
                 Salin & Tempel data matrix dari Excel / Google Sheets di bawah ini
               </p>
             </div>
             <div className="flex items-center gap-3">
-              <span className="text-[9px] font-black text-neutral-gray uppercase tracking-widest">Target Tujuan</span>
+              <span className="text-[9px] font-black text-neutral-gray uppercase tracking-widest">Target Target</span>
               <select
                 value={histImportTargetDate}
                 onChange={(e) => setHistImportTargetDate(e.target.value)}
                 className="bg-gray-50 border-none rounded-xl px-3 py-1.5 text-[10px] font-bold outline-none font-mono"
               >
-                <option value="all">Semua Kolom Tanggal (Matrix Excel)</option>
+                <option value="all">All Date Columns (Excel Matrix)</option>
                 {days.map(d => (
-                  <option key={d} value={d}>Hanya Tanggal: {d}</option>
+                  <option key={d} value={d}>Only Date: {d}</option>
                 ))}
               </select>
             </div>
@@ -5174,8 +5174,8 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
               <textarea
                 placeholder={
                   histImportTargetDate === "all"
-                    ? "Contoh format matrix excel (pisahkan tab / koma):\n10\t12\t15\t10\n10\t12\t14\t11\n8\t10\t12\t9"
-                    : "Contoh format kolom tunggal tanggal (Satu angka per baris):\n12\n15\n18\n20\n24\n12"
+                    ? "example format matrix excel (pisahkan tab / koma):\n10\t12\t15\t10\n10\t12\t14\t11\n8\t10\t12\t9"
+                    : "Example single column format (One number per row):\n12\n15\n18\n20\n24\n12"
                 }
                 rows={4}
                 value={histBulkInput}
@@ -5193,9 +5193,9 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
             <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl space-y-2">
               <h5 className="text-[9px] font-black uppercase tracking-widest text-slate-500">Petunjuk Format</h5>
               <ul className="list-disc pl-4 text-[9px] text-slate-600 font-medium space-y-1.5 leading-relaxed">
-                <li>Untuk <strong>Kolom Tunggal</strong>: Pilih tanggal tujuan, lalu salin satu kolom angka dari Excel (misal 24 baris untuk interval 1 Jam).</li>
-                <li>Untuk <strong>Matrix Multi-Tanggal</strong>: Pilih durasi 'Semua Kolom', lalu salin range baris & kolom di Excel. Kolom akan dicocokkan berurutan dengan tanggal aktif.</li>
-                <li>Data yang Anda tempel akan langsung tampil pada sheet grid interaktif dan dapat disunting/diedit kembali sebelum disimpan permanen ke Supabase.</li>
+                <li>For <strong>Kolom Tunggal</strong>: Select tanggal tujuan, lalu copy satu kolom angka dari Excel (misal 24 baris for interval 1 Hour).</li>
+                <li>For <strong>Matrix Multi-Tanggal</strong>: Select duration 'All Kolom', then paste rows & columns from Excel. Columns will match sequentially with active dates.</li>
+                <li>Pasted data will appear on the interactive grid sheet and can be edited before saving permanently to Supabase.</li>
               </ul>
             </div>
           </div>
@@ -5213,7 +5213,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                 KOMPOSISI AGENT PER SHIFT (SHIFT COMPOSITION)
               </h4>
               <p className="text-[9px] text-[#6366f1] font-black uppercase tracking-wider mt-1">
-                Kebutuhan jumlah agent per shift berdasarkan interval Roster Requirements Matrix di atas
+                Agent requirement per shift Based on interval Roster Requirements Matrix di atas
               </p>
             </div>
             <div className="flex items-center gap-2 bg-white p-1.5 rounded-xl border border-slate-100">
@@ -5360,7 +5360,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
           
           <div className="p-4 bg-slate-50/80 border-t border-slate-100 text-center">
             <p className="text-[9.5px] text-[#6366f1] font-black uppercase tracking-widest flex items-center justify-center gap-1.5">
-              <Zap size={11} className="animate-bounce" /> TIPS: Sesuaikan angka kebutuhan interval di "Roster Requirements Matrix" di atas untuk memperbarui komposisi shift secara real-time!
+              <Zap size={11} className="animate-bounce" /> TIP: Adjust interval requirement numbers di "Roster Requirements Matrix" di atas for memperbarui komposisi shift secara real-time!
             </p>
           </div>
         </div>
@@ -5377,9 +5377,9 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
               </h4>
             </div>
             <div className="text-right">
-              <p className="text-[9px] font-black text-neutral-gray uppercase tracking-widest">Metrik Terpilih</p>
+              <p className="text-[9px] font-black text-neutral-gray uppercase tracking-widest">Metrik Selected</p>
               <p className="text-xs font-black text-black">
-                {days.length} Hari • {slots.length} Slots per Hari
+                {days.length} Days • {slots.length} Slots per Days
               </p>
             </div>
           </div>
@@ -5447,7 +5447,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                 {/* Summary / Totals Row */}
                 <tr className="bg-sky-50 border-b border-sky-100 text-sky-950 font-black">
                   <td className="w-[180px] px-3 py-2 text-center border-r border-sky-100 font-sans text-[9px] uppercase tracking-widest text-sky-900 bg-sky-50">
-                    Total Hari (SUM)
+                    Total Days (SUM)
                   </td>
                   {columnTotals.map((tot, idx) => (
                     <td
@@ -5528,7 +5528,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
             <div className="flex items-center gap-2.5">
               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
               <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
-                Spreadsheet sedia untuk di-edit langsung. Tekan tombol simpan di kanan bawah untuk menyimpan secara permanen ke database Supabase
+                Spreadsheet is ready for direct editing. Press save button below to save permanently to Supabase
               </p>
             </div>
             <button
@@ -5536,7 +5536,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
               disabled={histSaving || histLoading}
               className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 rounded-xl text-white text-[10px] font-black uppercase tracking-widest transition-colors flex items-center gap-1.5"
             >
-              <ClipboardCheck size={12} /> Simpan Perubahan
+              <ClipboardCheck size={12} /> Save Perubahan
             </button>
           </div>
         </div>
@@ -5553,13 +5553,13 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                 Roster Scheduled Coverage Matrix
               </h4>
               <p className="text-[9.5px] text-[#059669] font-black uppercase tracking-wider mt-1">
-                Kebutuhan hasil coverage agent per interval berdasarkan data roster schedule yang telah dibuat / digenerate
+                Kebutuhan hasil coverage agent per interval Based on data roster schedule yang telah dibuat / digenerate
               </p>
             </div>
             <div className="text-right">
               <p className="text-[9px] font-black text-neutral-gray uppercase tracking-widest">Metrik Terjalin</p>
               <p className="text-xs font-black text-black">
-                {days.length} Hari • {slots.length} Slots per Hari
+                {days.length} Days • {slots.length} Slots per Days
               </p>
             </div>
           </div>
@@ -5627,7 +5627,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                 {/* Summary / Totals Row */}
                 <tr className="bg-emerald-50 border-b border-emerald-100 text-emerald-950 font-black">
                   <td className="w-[180px] px-3 py-2 text-center border-r border-emerald-100 font-sans text-[9px] uppercase tracking-widest text-[#059669] bg-emerald-50">
-                    Total Hari (SUM)
+                    Total Days (SUM)
                   </td>
                   {scheduledColumnTotals.map((tot, idx) => (
                     <td
@@ -5665,7 +5665,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                       <div className="flex flex-col items-center justify-center gap-2">
                         <AlertCircle size={24} className="text-amber-500 animate-pulse" />
                         <span className="text-[10px] font-black uppercase tracking-widest text-amber-600">
-                          Belum ada schedule yang dibuat. Silakan buat schedule terlebih dahulu di tab "Schedule Generator".
+                          No schedule generated yet. Please generate schedule first in the "Schedule Generator".
                         </span>
                       </div>
                     </td>
@@ -5702,7 +5702,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
             <div className="flex items-center gap-2.5">
               <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
               <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
-                Matriks coverage di atas mewakili jumlah kapasitas agent aktual yang tersedia untuk bekerja pada setiap interval waktu.
+                Matriks coverage di atas mewakili jumlah kapasitas agent aktual yang tersedia for bekerja pada setiap interval waktu.
               </p>
             </div>
           </div>
@@ -5726,7 +5726,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
             <div className="text-right">
               <p className="text-[9px] font-black text-neutral-gray uppercase tracking-widest">Metrik Selisih</p>
               <p className="text-xs font-black text-black">
-                {days.length} Hari • {slots.length} Slots per Hari
+                {days.length} Days • {slots.length} Slots per Days
               </p>
             </div>
           </div>
@@ -5794,7 +5794,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                 {/* Summary / Totals Row */}
                 <tr className="bg-slate-100 border-b border-slate-200 text-slate-950 font-black">
                   <td className="w-[180px] px-3 py-2 text-center border-r border-slate-200 font-sans text-[9px] uppercase tracking-widest text-[#475569] bg-slate-100">
-                    Total Gap Hari (SUM)
+                    Total Gap Days (SUM)
                   </td>
                   {days.map((d, idx) => {
                     const totReq = columnTotals[idx] || 0;
@@ -5916,7 +5916,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
           <div className="flex items-center gap-4 font-mono">
             <div className="text-right">
               <p className="text-[9px] font-black text-neutral-gray uppercase tracking-widest mb-0.5">Total DB Records</p>
-              <p className="text-2xl font-black text-black">{dbEmployees.length} Karyawan</p>
+              <p className="text-2xl font-black text-black">{dbEmployees.length} Employee</p>
             </div>
             <div className="flex flex-col items-end">
               <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-[9px] font-black uppercase tracking-widest ${usingFallback ? 'bg-amber-50 text-amber-700 border border-amber-100' : 'bg-green-50 text-green-700 border border-green-100'}`}>
@@ -5942,12 +5942,12 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
             <div>
               <h4 className="text-sm font-black text-black uppercase tracking-wider">Bulk Add Employees</h4>
               <p className="text-neutral-gray text-[10px] font-black uppercase tracking-widest mt-1">
-                Paste daftar karyawan di bawah ini (Format: NIP, Name, Skill, Channel, Gender, Religion, Project, Unit, Site) atau cukup pisahkan dengan comma/tab
+                Paste employee list below (Format: NIP, Name, Skill, Channel, Gender, Religion, Project, Unit, Site) or just separate with comma/tab
               </p>
             </div>
             
             <textarea
-              placeholder="Contoh format lengkap (9 kolom):&#10;2221669, Yoga Fachrul Tristiawan, English, Voice, Male, Islam, Project Alpha, Unit A, Jakarta&#10;&#10;Atau cukup ketik nama saja per baris (kolom lain otomatis default):&#10;Helmi Khairunnisa Putri Kaylsi&#10;Elina Isninda Riyani"
+              placeholder="example full format (9 columns):&#10;2221669, Yoga Fachrul Tristiawan, English, Voice, Male, Islam, Project Alpha, Unit A, Jakarta&#10;&#10;Or just type names per row (other columns will default):&#10;Helmi Khairunnisa Putri Kaylsi&#10;Elina Isninda Riyani"
               rows={6}
               value={bulkInput}
               onChange={(e) => setBulkInput(e.target.value)}
@@ -5980,7 +5980,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                   onClick={() => setIsAddingSingle(!isAddingSingle)}
                   className="text-[10px] font-black uppercase tracking-widest text-[#6366f1] underline"
                 >
-                  {isAddingSingle ? "Tutup Form" : "Buka Form"}
+                  {isAddingSingle ? "Close Form" : "Open Form"}
                 </button>
               </div>
 
@@ -5988,11 +5988,11 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                 <form onSubmit={handleSingleSubmit} className="space-y-4 animate-in slide-in-from-top duration-300">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <div className="space-y-1">
-                      <label className="text-[9px] font-black text-neutral-gray uppercase tracking-widest block font-sans">Nama Karyawan</label>
+                      <label className="text-[9px] font-black text-neutral-gray uppercase tracking-widest block font-sans">Employee Name</label>
                       <input 
                         type="text"
                         required
-                        placeholder="Nama lengkap..."
+                        placeholder="Full name..."
                         value={singleFormData.name}
                         onChange={(e) => setSingleFormData(prev => ({ ...prev, name: e.target.value }))}
                         className="w-full bg-gray-50 border-none rounded-xl px-4 py-2 text-xs font-semibold focus:ring-1 focus:ring-black outline-none"
@@ -6092,7 +6092,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                     disabled={dbLoading}
                     className="w-full py-2.5 bg-black text-white hover:bg-neutral-800 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all mt-2"
                   >
-                    Tambah Karyawan
+                    Add Employee
                   </button>
                 </form>
               ) : (
@@ -6102,7 +6102,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                     onClick={() => setIsAddingSingle(true)}
                     className="mt-1 px-4 py-2 bg-gray-50 border border-gray-100 hover:bg-gray-100 text-[9px] font-black uppercase tracking-widest rounded-xl transition-all"
                   >
-                    Buka Form
+                    Open Form
                   </button>
                 </div>
               )}
@@ -6114,9 +6114,9 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                 <ShieldCheck size={14} className="text-black" /> Petunjuk Penggunaan
               </span>
               <ul className="list-disc pl-4 text-[10px] text-slate-600 font-medium space-y-2 leading-relaxed">
-                <li>Setiap karyawan yang ditambahkan di sini akan otomatis disinkronkan ke tabel terpisah <strong>`workforce`</strong> di Supabase.</li>
-                <li>Daftar karyawan ini akan langsung aktif pada tab <strong>Interval</strong> & <strong>Calendar</strong> untuk plotting jadwal roster.</li>
-                <li>Gunakan fitur <strong>Bulk Add</strong> untuk memasukkan puluhan karyawan dengan format rapi secara instan.</li>
+                <li>Every employee added here will automatically sync to the separate table <strong>`workforce`</strong> di Supabase.</li>
+                <li>This employee list will immediately be active on the <strong>Interval</strong> & <strong>Calendar</strong> for roster plotting.</li>
+                <li>Use <strong>Bulk Add</strong> feature to instantly add dozens of employees.</li>
               </ul>
             </div>
           </div>
@@ -6126,10 +6126,10 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
         <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
           <div className="p-6 border-b border-gray-50 flex items-center justify-between flex-wrap gap-4">
             <div className="flex items-center gap-3">
-              <h4 className="text-base font-black text-black uppercase tracking-tight font-sans">Daftar Karyawan di Database ({filteredDbEmployees.length})</h4>
+              <h4 className="text-base font-black text-black uppercase tracking-tight font-sans">Daftar Employee di Database ({filteredDbEmployees.length})</h4>
               {selectedDbEmployeeIds.length > 0 && (
                 <span className="px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-full text-[9px] font-black uppercase tracking-wider animate-in zoom-in-95">
-                  {selectedDbEmployeeIds.length} Terpilih
+                  {selectedDbEmployeeIds.length} Selected
                 </span>
               )}
             </div>
@@ -6138,18 +6138,18 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
               <div className="flex items-center gap-2 animate-in fade-in slide-in-from-top-2 duration-200">
                 {bulkDeleteConfirm ? (
                   <div className="flex items-center gap-1.5 bg-rose-50 p-1.5 rounded-2xl border border-rose-100">
-                    <span className="text-[9px] font-black uppercase text-rose-700 px-2 font-sans">Yakin hapus {selectedDbEmployeeIds.length} karyawan?</span>
+                    <span className="text-[9px] font-black uppercase text-rose-700 px-2 font-sans">Are you sure to delete {selectedDbEmployeeIds.length} employees?</span>
                     <button
                       onClick={handleBulkDeleteDbEmployees}
                       className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-[9px] font-black uppercase text-white tracking-widest rounded-xl transition-all shadow-sm font-sans"
                     >
-                      Ya, Hapus!
+                      Yes, Delete!
                     </button>
                     <button
                       onClick={() => setBulkDeleteConfirm(false)}
                       className="px-2.5 py-1.5 bg-white hover:bg-gray-50 border border-gray-100 text-[9px] font-black uppercase text-gray-600 tracking-widest rounded-xl transition-all font-sans"
                     >
-                      Batal
+                      Cancel
                     </button>
                   </div>
                 ) : (
@@ -6157,7 +6157,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                     onClick={() => setBulkDeleteConfirm(true)}
                     className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 active:bg-rose-200 text-[9px] font-black uppercase text-active-red tracking-widest rounded-xl transition-all flex items-center gap-1.5 hover:scale-[1.02] font-sans"
                   >
-                    <Trash2 size={12} className="text-active-red" /> Bulk Hapus
+                    <Trash2 size={12} className="text-active-red" /> Bulk Delete
                   </button>
                 )}
               </div>
@@ -6185,8 +6185,8 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
             </div>
           ) : dbEmployees.length === 0 ? (
             <div className="py-20 text-center border-dashed border-2 border-gray-100 m-6 rounded-3xl flex flex-col items-center justify-center gap-3 bg-slate-50/50">
-              <p className="text-[10px] font-black uppercase tracking-widest text-neutral-gray">Belum ada karyawan di database Supabase Anda</p>
-              <p className="text-[9px] font-semibold text-neutral-gray max-w-xs leading-relaxed text-center">Gunakan Bulk Add atau Single Add di atas untuk memasukkan data master pertama Anda.</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-neutral-gray">No employees in your Supabase database yet</p>
+              <p className="text-[9px] font-semibold text-neutral-gray max-w-xs leading-relaxed text-center">Gunakan Bulk Add atau Single Add di atas for memasukkan data master pertama Anda.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -6262,7 +6262,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                               onClick={() => setDeleteConfirmId(null)}
                               className="px-2.5 py-1 bg-gray-100 hover:bg-gray-200 text-[9px] font-black uppercase text-gray-600 tracking-widest rounded-lg transition-colors font-sans"
                             >
-                              Batal
+                              Cancel
                             </button>
                           </div>
                         ) : (
@@ -6270,7 +6270,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                             onClick={() => setDeleteConfirmId(emp.id)}
                             className="px-3 py-1 bg-rose-50 hover:bg-rose-100 text-[9px] font-black uppercase text-active-red tracking-widest rounded-lg transition-colors font-sans"
                           >
-                            Hapus
+                            Delete
                           </button>
                         )}
                       </td>
@@ -6563,7 +6563,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
             }}
           >
             <div className="px-3 py-1.5 text-gray-400 font-extrabold text-[9px] tracking-widest border-b border-gray-100 uppercase">
-              Jadwal: {format(parseISO(calendarContextMenu.dateStr), 'dd MMM yyyy')}
+              Schedule: {format(parseISO(calendarContextMenu.dateStr), 'dd MMM yyyy')}
             </div>
             
             <div className="flex flex-col gap-0.5 max-h-[220px] overflow-y-auto mt-1">
@@ -6621,7 +6621,7 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                 className="w-full text-left px-3 py-2 rounded-xl hover:bg-rose-50 text-rose-600 transition-colors flex items-center gap-2 border-t border-gray-100 mt-2 font-bold uppercase tracking-wider"
               >
                 <Trash2 size={12} className="text-rose-500 shrink-0" />
-                Set Libur (OFF)
+                Set Holiday (OFF)
               </button>
             </div>
           </div>

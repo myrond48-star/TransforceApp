@@ -1365,7 +1365,7 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                        </p>
                      </div>
                      <div className="flex items-center gap-2">
-                       <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Pilih Project:</span>
+                       <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Select Project:</span>
                        <select
                          className="p-2 px-3 bg-white border border-slate-200 rounded-xl text-[10px] font-black text-rose-600 uppercase tracking-widest cursor-pointer focus:ring-1 focus:ring-rose-500 outline-none"
                          value={selectedShiftProject}
@@ -1831,7 +1831,7 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                     onClick={() => setShowBulkHol(false)}
                     className={`flex-1 py-3 px-4 font-black text-[9px] uppercase tracking-widest rounded-xl transition-all border text-center ${!showBulkHol ? 'bg-slate-900 border-slate-900 text-white shadow-md' : 'bg-white border-slate-200 text-slate-400 hover:text-slate-900'}`}
                   >
-                    Tambah Satu-Satu
+                    Add Satu-Satu
                   </button>
                   <button 
                     type="button"
@@ -1991,7 +1991,7 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                           </div>
                           <div className="flex-1">
                             <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-1">
-                              Waktu Break (Jam Istirahat)
+                              Waktu Break (Hour Istirahat)
                             </label>
                             <input 
                               type="text" 
@@ -2051,7 +2051,7 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
 
                   <div className="flex flex-col sm:flex-row gap-4 items-end mb-8 bg-slate-50 p-6 rounded-2xl border border-slate-100">
                     <div className="flex-1">
-                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">Tanggal Mulai</label>
+                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">Start Date</label>
                       <input 
                         type="date" 
                         value={newPuasaStart} 
@@ -2060,7 +2060,7 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                       />
                     </div>
                     <div className="flex-1">
-                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">Tanggal Selesai</label>
+                      <label className="text-[9px] font-black text-slate-500 uppercase tracking-widest block mb-2">End Date</label>
                       <input 
                         type="date" 
                         value={newPuasaEnd} 
@@ -2222,7 +2222,7 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
 
                               <div>
                                 <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-1">
-                                  Fasting Shift End (Cut Jam)
+                                  Fasting Shift End (Cut Hour)
                                 </label>
                                 <input 
                                   type="text" 
@@ -2441,7 +2441,7 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                     `    site VARCHAR(255) DEFAULT 'Jakarta',\n` +
                     `    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL\n` +
                     `);\n\n` +
-                    `-- 2. Aktifkan RLS untuk workforce\n` +
+                    `-- 2. Aktifkan RLS for workforce\n` +
                     `ALTER TABLE public.workforce ENABLE ROW LEVEL SECURITY;\n\n` +
                     `-- 3. Kebijakan RLS workforce\n` +
                     `CREATE POLICY "Allow public read access" ON public.workforce FOR SELECT USING (true);\n` +
@@ -2459,7 +2459,7 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                     `    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,\n` +
                     `    CONSTRAINT unique_requirement UNIQUE (date, time_slot, interval_type, project)\n` +
                     `);\n\n` +
-                    `-- 5. Aktifkan RLS untuk interval_requirements\n` +
+                    `-- 5. Aktifkan RLS for interval_requirements\n` +
                     `ALTER TABLE public.interval_requirements ENABLE ROW LEVEL SECURITY;\n\n` +
                     `-- 6. Kebijakan RLS interval_requirements\n` +
                     `CREATE POLICY "Allow public read interval_requirements" ON public.interval_requirements FOR SELECT USING (true);\n` +
@@ -2476,14 +2476,14 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                     `    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,\n` +
                     `    CONSTRAINT unique_roster_record UNIQUE (date, emp_id, project)\n` +
                     `);\n\n` +
-                    `-- 8. Aktifkan RLS untuk roster_schedule\n` +
+                    `-- 8. Aktifkan RLS for roster_schedule\n` +
                     `ALTER TABLE public.roster_schedule ENABLE ROW LEVEL SECURITY;\n\n` +
                     `-- 9. Kebijakan RLS roster_schedule\n` +
                     `CREATE POLICY "Allow public read roster_schedule" ON public.roster_schedule FOR SELECT USING (true);\n` +
                     `CREATE POLICY "Allow public insert roster_schedule" ON public.roster_schedule FOR INSERT WITH CHECK (true);\n` +
                     `CREATE POLICY "Allow public update roster_schedule" ON public.roster_schedule FOR UPDATE USING (true) WITH CHECK (true);\n` +
                     `CREATE POLICY "Allow public delete roster_schedule" ON public.roster_schedule FOR DELETE USING (true);\n\n` +
-                    `-- 10. Buat Tabel 'master_shifts' (Tabel Terpisah untuk Master Shift Registry)\n` +
+                    `-- 10. Buat Tabel 'master_shifts' (Tabel Terpisah for Master Shift Registry)\n` +
                     `CREATE TABLE IF NOT EXISTS public.master_shifts (\n` +
                     `    id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,\n` +
                     `    project VARCHAR(255) NOT NULL,\n` +
@@ -2494,7 +2494,7 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                     `    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,\n` +
                     `    CONSTRAINT unique_project_shift_code UNIQUE (project, code)\n` +
                     `);\n\n` +
-                    `-- 11. Aktifkan RLS untuk master_shifts\n` +
+                    `-- 11. Aktifkan RLS for master_shifts\n` +
                     `ALTER TABLE public.master_shifts ENABLE ROW LEVEL SECURITY;\n\n` +
                     `-- 12. Kebijakan RLS master_shifts\n` +
                     `CREATE POLICY "Allow public read master_shifts" ON public.master_shifts FOR SELECT USING (true);\n` +
@@ -2507,7 +2507,7 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                     `    settings JSONB NOT NULL,\n` +
                     `    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL\n` +
                     `);\n\n` +
-                    `-- 14. Aktifkan RLS untuk portal_settings\n` +
+                    `-- 14. Aktifkan RLS for portal_settings\n` +
                     `ALTER TABLE public.portal_settings ENABLE ROW LEVEL SECURITY;\n\n` +
                     `-- 15. Kebijakan RLS portal_settings\n` +
                     `CREATE POLICY "Allow public read portal_settings" ON public.portal_settings FOR SELECT USING (true);\n` +
@@ -2585,7 +2585,7 @@ CREATE TABLE IF NOT EXISTS public.roster_schedule (
     CONSTRAINT unique_roster_record UNIQUE (date, emp_id, project)
 );
 
--- 8. Aktifkan RLS untuk roster_schedule
+-- 8. Aktifkan RLS for roster_schedule
 ALTER TABLE public.roster_schedule ENABLE ROW LEVEL SECURITY;
 
 -- 9. Kebijakan Keamanan (RLS Policies)
@@ -2594,7 +2594,7 @@ CREATE POLICY "Allow public insert roster_schedule" ON public.roster_schedule FO
 CREATE POLICY "Allow public update roster_schedule" ON public.roster_schedule FOR UPDATE USING (true) WITH CHECK (true);
 CREATE POLICY "Allow public delete roster_schedule" ON public.roster_schedule FOR DELETE USING (true);
 
--- 10. Buat Tabel 'master_shifts' (Tabel Terpisah untuk Master Shift Registry)
+-- 10. Buat Tabel 'master_shifts' (Tabel Terpisah for Master Shift Registry)
 CREATE TABLE IF NOT EXISTS public.master_shifts (
     id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
     project VARCHAR(255) NOT NULL,
@@ -2606,7 +2606,7 @@ CREATE TABLE IF NOT EXISTS public.master_shifts (
     CONSTRAINT unique_project_shift_code UNIQUE (project, code)
 );
 
--- 11. Aktifkan RLS untuk master_shifts
+-- 11. Aktifkan RLS for master_shifts
 ALTER TABLE public.master_shifts ENABLE ROW LEVEL SECURITY;
 
 -- 12. Kebijakan Keamanan (RLS Policies)
@@ -2622,7 +2622,7 @@ CREATE TABLE IF NOT EXISTS public.portal_settings (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 14. Aktifkan RLS untuk portal_settings
+-- 14. Aktifkan RLS for portal_settings
 ALTER TABLE public.portal_settings ENABLE ROW LEVEL SECURITY;
 
 -- 15. Kebijakan Keamanan (RLS Policies)
