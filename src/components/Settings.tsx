@@ -26,7 +26,8 @@ import {
   HardDrive,
   FileCheck,
   Wifi,
-  Palette
+  Palette,
+  Lock
 } from 'lucide-react';
 
 interface SettingsProps {
@@ -98,6 +99,77 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
   };
   const [isSyncing, setIsSyncing] = useState(false);
   const [isPushing, setIsPushing] = useState(false);
+
+  const [sessionRole, setSessionRole] = useState<"Admin" | "Manager" | "Agent" | string>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('portal_active_session_role');
+      if (saved) return saved;
+    }
+    return "Admin";
+  });
+
+  interface RegisteredShift {
+    code: string;
+    s: string;
+    e: string;
+  }
+
+  // Registered Shift Codes for consistent registry
+  const [registeredShiftCodes, setRegisteredShiftCodes] = useState<RegisteredShift[]>(() => {
+    if (typeof window !== 'undefined') {
+      const savedV2 = localStorage.getItem('portal_registered_shift_codes_v2');
+      if (savedV2) {
+        try {
+          return JSON.parse(savedV2);
+        } catch (e) {
+          console.warn("Failed to parse registered shift codes v2:", e);
+        }
+      }
+      
+      const oldSaved = localStorage.getItem('portal_registered_shift_codes');
+      if (oldSaved) {
+        try {
+          const oldList = JSON.parse(oldSaved);
+          if (Array.isArray(oldList)) {
+            return oldList.map((item: any) => {
+              if (item && typeof item === 'object' && item.code) {
+                return { code: item.code, s: item.s || "08:00", e: item.e || "17:00" };
+              }
+              const codeStr = String(item).toUpperCase();
+              const def = SHIFT_DEFAULTS[codeStr] || { s: '08:00', e: '17:00' };
+              return { code: codeStr, s: def.s, e: def.e };
+            });
+          }
+        } catch (e) {
+          console.warn("Failed to parse old registered shift codes:", e);
+        }
+      }
+    }
+    return [
+      { code: "P1", s: "06:00", e: "15:00" },
+      { code: "P2", s: "07:00", e: "16:00" },
+      { code: "P3", s: "08:00", e: "17:00" },
+      { code: "P4", s: "09:00", e: "18:00" },
+      { code: "P9", s: "10:00", e: "19:00" },
+      { code: "S1", s: "11:00", e: "20:00" },
+      { code: "S2", s: "12:00", e: "21:00" },
+      { code: "S3", s: "12:30", e: "21:30" },
+      { code: "S4", s: "13:00", e: "22:00" },
+      { code: "S5", s: "16:00", e: "01:00" },
+      { code: "S6", s: "14:00", e: "23:00" },
+      { code: "S7", s: "15:00", e: "00:00" },
+      { code: "M3", s: "21:00", e: "06:00" },
+      { code: "M1", s: "22:00", e: "07:00" }
+    ];
+  });
+
+  const saveRegisteredShiftCodes = (newCodes: RegisteredShift[]) => {
+    setRegisteredShiftCodes(newCodes);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('portal_registered_shift_codes_v2', JSON.stringify(newCodes));
+      localStorage.setItem('portal_registered_shift_codes', JSON.stringify(newCodes.map(x => x.code)));
+    }
+  };
 
   // API State
   const [url, setUrl] = useState(settings.apiUrl);
@@ -1400,14 +1472,20 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
 
                        {shifts.map((s, i) => (
                          <div key={i} className="flex gap-3 items-center bg-white p-4 rounded-2xl border border-slate-100 shadow-sm transition-all group">
-                           <select 
-                              className="w-[100px] p-2.5 bg-slate-50 border border-slate-100 rounded-xl font-black font-mono text-[10px] text-rose-600 uppercase text-center focus:outline-none focus:ring-1 focus:ring-rose-500" 
-                              value={s.code} 
+                           <select
+                              className="w-[100px] p-2.5 bg-slate-50 border border-slate-100 rounded-xl font-black font-mono text-[10px] text-rose-600 uppercase text-center focus:outline-none focus:ring-1 focus:ring-rose-500"
+                              value={s.code || ""}
                               onChange={e => {
-                                const code = e.target.value;
+                                const code = e.target.value.toUpperCase();
                                 const newS = [...shifts];
                                 newS[i].code = code;
-                                if (SHIFT_DEFAULTS[code]) {
+                                
+                                const reg = registeredShiftCodes.find(x => x.code === code);
+                                if (reg) {
+                                  newS[i].s = reg.s;
+                                  newS[i].e = reg.e;
+                                  newS[i].w = i + 1; // logical default order
+                                } else if (SHIFT_DEFAULTS[code]) {
                                   newS[i].s = SHIFT_DEFAULTS[code].s;
                                   newS[i].e = SHIFT_DEFAULTS[code].e;
                                   newS[i].w = SHIFT_DEFAULTS[code].w;
@@ -1415,11 +1493,11 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                                 setShifts(newS);
                               }}
                             >
-                              <option value="">-- CODE --</option>
-                              {["P1", "P2", "P3", "P4", "P9", "S1", "S2", "S3", "S4", "S5", "S6", "S7", "M3", "M1"].map(code => (
-                                <option key={code} value={code}>{code}</option>
+                              <option value="">Code</option>
+                              {registeredShiftCodes.map(item => (
+                                <option key={item.code} value={item.code}>{item.code}</option>
                               ))}
-                              {s.code && !["P1", "P2", "P3", "P4", "P9", "S1", "S2", "S3", "S4", "S5", "S6", "S7", "M3", "M1"].includes(s.code) && (
+                              {s.code && !registeredShiftCodes.some(x => x.code === s.code) && (
                                 <option value={s.code}>{s.code}</option>
                               )}
                             </select>
@@ -1470,6 +1548,137 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                      </div>
                    )}
                 </div>
+
+                 {/* Registered Shift Codes Registry (Consistently populated in Dropdown) */}
+                 <div className="mt-8 bg-white p-6 md:p-8 rounded-[2rem] border border-slate-200/80 shadow-sm relative overflow-hidden">
+                   <h5 className="m-0 text-slate-800 text-xs font-black flex items-center gap-2.5 tracking-widest uppercase font-sans">
+                     <Palette size={16} className="text-rose-600" />
+                     REGISTERED SHIFT CODES DROPDOWN REGISTRY
+                   </h5>
+                   <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mt-1.5 mb-5 font-sans leading-relaxed">
+                     Configure dynamic shift codes with customized start & end hours. Only system Administrators have editing access.
+                   </p>
+
+                   <div className="flex flex-wrap gap-2.5 items-center mb-6 border-t border-slate-100 pt-5">
+                      {/* Interactive Profile Simulator */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 w-full mb-3 p-3.5 bg-slate-50 border border-slate-100 rounded-2xl">
+                        <span className="text-[9px] font-black tracking-wider text-slate-500 uppercase font-sans flex items-center gap-1.5 leading-none">
+                          <Lock size={11} className="text-slate-400 shrink-0" /> Simulasi Profil Pengguna (Demo):
+                        </span>
+                        <select
+                          value={sessionRole}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setSessionRole(val);
+                            localStorage.setItem('portal_active_session_role', val);
+                            showStatus(`Simulasi profil aktif sebagai: ${val.toUpperCase()}`);
+                          }}
+                          className="bg-white border border-slate-200 px-3 py-1.5 rounded-xl text-[9px] font-black tracking-widest uppercase text-rose-600 focus:outline-none cursor-pointer font-sans"
+                        >
+                          <option value="Admin">Admin (Full Editing Access)</option>
+                          <option value="Manager">Manager (Read Only Access)</option>
+                          <option value="Agent">Agent (Read Only Access)</option>
+                        </select>
+                      </div>
+                     {registeredShiftCodes.map((c) => (
+                       <span 
+                         key={c.code} 
+                         className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-50 border border-slate-100 rounded-xl text-[10px] font-black font-mono text-rose-600 uppercase tracking-wider group transition-all hover:bg-rose-50/50"
+                       >
+                          <span className="font-extrabold">{c.code}</span>
+                          <span className="text-[9px] text-slate-400 font-medium font-sans lowercase">({c.s}–{c.e})</span>
+                         <button
+                           type="button"
+                           onClick={() => {
+                             if (registeredShiftCodes.length <= 1) {
+                               showStatus("Must keep at least one registered shift code!");
+                               return;
+                             }
+                             const updated = registeredShiftCodes.filter(x => x.code !== c.code);
+                             saveRegisteredShiftCodes(updated);
+                             showStatus(`Removed shift code ${c.code} from registered list.`);
+                           }}
+                           className="text-slate-300 hover:text-rose-500 transition-colors pointer-events-auto"
+                           title={`Remove ${c.code}`}
+                         >
+                           <X size={10} className="stroke-[3]" />
+                         </button>
+                       </span>
+                     ))}
+                   </div>
+
+                   {sessionRole !== "Admin" ? (
+                      <div className="bg-rose-50/50 border border-rose-100/50 rounded-2xl p-4 flex items-center gap-3 text-rose-800">
+                        <Lock size={14} className="text-rose-600 shrink-0" />
+                        <div className="text-[10px] font-black uppercase tracking-wider font-sans leading-none">
+                          Hanya Admin yang dapat register kode shift baru. Ganti profile ke "Admin" di profile simulator box untuk mengedit.
+                        </div>
+                      </div>
+                    ) : (
+                      <form 
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          const form = e.currentTarget;
+                          const codeInput = form.elements.namedItem("newCode") as HTMLInputElement;
+                          const startInput = form.elements.namedItem("newStart") as HTMLInputElement;
+                          const endInput = form.elements.namedItem("newEnd") as HTMLInputElement;
+
+                          const code = codeInput.value.trim().toUpperCase();
+                          const s = startInput.value.trim();
+                          const eTime = endInput.value.trim();
+
+                          if (!code || !s || !eTime) return;
+                          
+                          if (registeredShiftCodes.some(x => x.code === code)) {
+                            showStatus(`This shift code is already registered.`);
+                            return;
+                          }
+                          const updated = [...registeredShiftCodes, { code, s, e: eTime }];
+                          saveRegisteredShiftCodes(updated);
+                          showStatus(`Successfully registered shift "${code}" (${s} - ${eTime}).`);
+                          form.reset();
+                        }}
+                        className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-50 border border-slate-100/60 p-4 rounded-2xl items-end w-full"
+                      >
+                        <div className="space-y-1.5">
+                          <label className="text-[8px] font-black uppercase tracking-wider text-slate-400 font-sans block">Shift Code</label>
+                          <input 
+                            type="text" 
+                            name="newCode"
+                            placeholder="e.g., P5, S8" 
+                            className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-black font-mono text-[10px] uppercase text-center focus:outline-none focus:ring-1 focus:ring-rose-500"
+                            required
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[8px] font-black uppercase tracking-wider text-slate-400 font-sans block">Start Time</label>
+                          <input 
+                            type="time" 
+                            name="newStart"
+                            defaultValue="08:00"
+                            className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-black font-mono text-[10px] text-center focus:outline-none focus:ring-1 focus:ring-rose-500"
+                            required
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <label className="text-[8px] font-black uppercase tracking-wider text-slate-400 font-sans block">End Time</label>
+                          <input 
+                            type="time" 
+                            name="newEnd"
+                            defaultValue="17:00"
+                            className="w-full p-2.5 bg-white border border-slate-200 rounded-xl font-black font-mono text-[10px] text-center focus:outline-none focus:ring-1 focus:ring-rose-500"
+                            required
+                          />
+                        </div>
+                        <button 
+                          type="submit"
+                          className="w-full py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-black text-[10px] uppercase tracking-wider rounded-xl transition-colors shrink-0"
+                        >
+                          Register Code
+                        </button>
+                      </form>
+                    )}
+                 </div>
               </div>
             )}
 
