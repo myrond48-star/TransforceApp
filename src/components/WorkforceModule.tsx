@@ -1980,23 +1980,9 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                             </span>
                             <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold text-white ${shiftCode.toUpperCase() === "OFF" ? "bg-rose-500" : (shift?.color || "bg-gray-400")}`}>{shiftCode.toUpperCase()}</span>
                           </div>
-                          <span className="text-[8px] sm:text-[9px] font-bold text-neutral-gray uppercase tracking-widest opacity-60 truncate flex items-center justify-between gap-1">
-                            <span className="truncate">
-                              {agent.nip} 
-                              {Object.keys(agent.activities).length > 0 && ` • Break: ${intervals[Math.min(...Object.keys(agent.activities).map(Number))]}`}
-                            </span>
-                            {Object.keys(agent.activities).length > 0 && (
-                              <button
-                                title="Delete Break Today"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleClearBreaks(agent.id);
-                                }}
-                                className="p-0.5 hover:bg-rose-50 rounded text-rose-600 transition-colors pointer-events-auto shrink-0"
-                              >
-                                <Trash2 size={11} className="stroke-[2.5]" />
-                              </button>
-                            )}
+                          <span className="text-[8px] sm:text-[9px] font-bold text-neutral-gray uppercase tracking-widest opacity-60 truncate">
+                            {agent.nip} 
+                            {Object.keys(agent.activities).length > 0 && ` • Break: ${intervals[Math.min(...Object.keys(agent.activities).map(Number))]}`}
                           </span>
                         </div>
                       </td>
