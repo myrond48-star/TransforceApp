@@ -193,6 +193,112 @@ async function startServer() {
     }
   });
 
+  // Outgoing multi-mode SMTP Email & Notification Dispatch Endpoint
+  app.post("/api/notifications/send", async (req, res) => {
+    const { recipient, subject, bodyHtml, bodyText, priority, smtpConfig } = req.body;
+
+    if (!recipient || !subject) {
+      return res.status(400).json({ error: "The Recipient and Subject fields are required." });
+    }
+
+    // Normalize recipient(s): support multiple emails by replacing semicolons with commas,
+    // splitting, trimming, and cleaning up before joining or passing to Nodemailer
+    const sanitizedRecipient = String(recipient)
+      .replace(/;/g, ",")
+      .split(",")
+      .map(email => email.trim())
+      .filter(Boolean)
+      .join(", ");
+
+    if (!sanitizedRecipient) {
+      return res.status(400).json({ error: "Recipient email address is invalid or empty." });
+    }
+
+    try {
+      if (smtpConfig && smtpConfig.host && smtpConfig.user && smtpConfig.pass) {
+        const hostLower = smtpConfig.host.toLowerCase();
+        const portInt = parseInt(smtpConfig.port) || 465;
+
+        // Smart guard: Detect if user is confusing POP (Post Office Protocol) with SMTP (Simple Mail Transfer Protocol)
+        if (hostLower.includes("pop") || portInt === 995 || portInt === 110) {
+          return res.status(400).json({
+            error: "Protocol Conflict Detected: You entered a POP (Post Office Protocol) configuration. The POP protocol is strictly used to retrieve or download emails (Inbound). To send emails (Outbound), you must use an official SMTP (Simple Mail Transfer Protocol) server, such as 'smtp.office365.com' or 'smtp-mail.outlook.com' on Port 587 (using STARTTLS mode)."
+          });
+        }
+
+        console.log(`[MAIL] Executing live email dispatch via SMTP (${smtpConfig.host}:${portInt}) ke ${sanitizedRecipient}...`);
+        
+        // Lazy loading nodemailer to ensure high efficiency and avoid crashes on load
+        const nodemailer = await import("nodemailer");
+
+        // Determine secure setting:
+        // Nodemailer: secure = true for port 465, secure = false for 587/25 (which then upgrades via STARTTLS)
+        const isSecure = smtpConfig.secure === true || portInt === 465;
+
+        const transporter = nodemailer.createTransport({
+          host: smtpConfig.host,
+          port: portInt,
+          secure: isSecure,
+          auth: {
+            user: smtpConfig.user,
+            pass: smtpConfig.pass
+          },
+          // Lenient security rules to bypass self-signed certificate restrictions commonly found on corporate mailservers
+          tls: {
+            rejectUnauthorized: false
+          },
+          connectionTimeout: 12000, // 12 seconds timeout to be slightly more lenient
+          greetingTimeout: 12000,
+          socketTimeout: 15000
+        });
+
+        // In SMTP, especially Office 355 / Outlook and Gmail, the 'from' email address MUST
+        // exactly match the authenticated 'user' email. Otherwise raising Error: 553 Mail from must equal authorized user.
+        const fromEmail = smtpConfig.user;
+
+        const info = await transporter.sendMail({
+          from: `"${smtpConfig.senderName || 'TransForce Platform Alert'}" <${fromEmail}>`,
+          to: sanitizedRecipient,
+          subject: subject,
+          text: bodyText || "",
+          html: bodyHtml || ""
+        });
+
+        console.log(`[MAIL] Live email dispatch successful! MessageID: ${info.messageId}`);
+        return res.json({
+          status: "success",
+          delivered: true,
+          messageId: info.messageId,
+          message: "Live email notification successfully sent to the inbox of " + sanitizedRecipient + "!"
+        });
+      } else {
+        // High fidelity simulated visual sandbox mode
+        console.log(`[MAIL] Sandbox Mode: Virtual delivery simulation to ${sanitizedRecipient} complete.`);
+        return res.json({
+          status: "success",
+          delivered: false,
+          message: "Virtual transmission simulation successfully placed in the Sandbox inbox."
+        });
+      }
+    } catch (err: any) {
+      console.error("[MAIL] Email dispatch error:", err);
+      
+      let friendlyError = err.message || String(err);
+      if (friendlyError.includes("Greeting never received")) {
+        friendlyError = "Greeting never received (connection timed out). This is usually caused by a mismatch between the Port setting and its SSL/TLS security configuration. If using Port 587 (Outlook/STARTTLS), ensure you select the 'STARTTLS' Mode (not SSL). If using Port 465, ensure you select 'SSL (465)' Mode.";
+      } else if (friendlyError.includes("ETIMEDOUT") || friendlyError.toLowerCase().includes("timeout") || friendlyError.includes("connect ETIMEDOUT")) {
+        friendlyError = "Connection Timeout. Please verify if your SMTP Host and Port are active and check any network firewall restrictions. Note: Cloud Run sandboxed environments can restrict some custom outbound ports; please use official SMTP Ports such as 587 (TLS/STARTTLS) or 465 (SSL) which are open.";
+      } else if (friendlyError.includes("invalid login") || friendlyError.includes("Authentication failed") || friendlyError.includes("recurrent code 535")) {
+        friendlyError = "Authentication Failed (Invalid Login). Please verify your SMTP Username and Password. For personal accounts like Gmail or Outlook, you must use a dedicated 'App Password' instead of your main account login password.";
+      }
+
+      return res.status(500).json({
+        status: "error",
+        error: friendlyError
+      });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({

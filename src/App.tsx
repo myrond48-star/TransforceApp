@@ -11,6 +11,7 @@ import KPITrackerModule from "./components/KPITrackerModule.tsx";
 import FacilityTrackerModule from "./components/FacilityTrackerModule.tsx";
 import SupportModule from "./components/SupportModule.tsx";
 import SecurityModule from "./components/SecurityModule.tsx";
+import NotificationTesterModule from "./components/NotificationTesterModule.tsx";
 import { Settings as SettingsModule } from "./components/Settings.tsx";
 import { 
   Users, 
@@ -85,6 +86,11 @@ const DASHBOARD_DATA: Category[] = [
     title: "Security",
     icon: ShieldAlert,
     description: "Enterprise-grade protection including network perimeters, SCRAM-SHA-256 auth, RBAC/RLS, and pgaudit monitoring.",
+  },
+  {
+    title: "Notification Tester",
+    icon: Bell,
+    description: "Validate SMTP delivery services and trigger interactive multi-template alerts including Security, Shift Roster, and KPIs.",
   },
 ];
 
@@ -317,13 +323,13 @@ export default function App() {
                   key={idx}
                   variants={itemVariants}
                   onClick={() => {
-                    const allowed = ["Workforce", "HC Management", "PL Analysis", "KPI Tracker", "Facility Tracker", "ID Creation & Deletion", "Support", "Security"];
+                    const allowed = ["Workforce", "HC Management", "PL Analysis", "KPI Tracker", "Facility Tracker", "ID Creation & Deletion", "Support", "Security", "Notification Tester"];
                     if (allowed.includes(category.title)) {
                       setActiveModule(category.title);
                     }
                   }}
                   className={`group bg-white rounded-2xl border border-gray-100 overflow-hidden hover:border-active-red/20 hover:shadow-[0_20px_50px_rgba(0,0,0,0.06)] transition-all duration-500 flex flex-col relative cursor-pointer ${
-                    !(["Workforce", "HC Management", "PL Analysis", "KPI Tracker", "Facility Tracker", "ID Creation & Deletion", "Support", "Security"].includes(category.title)) ? 'opacity-60 grayscale' : ''
+                    !(["Workforce", "HC Management", "PL Analysis", "KPI Tracker", "Facility Tracker", "ID Creation & Deletion", "Support", "Security", "Notification Tester"].includes(category.title)) ? 'opacity-60 grayscale' : ''
                   }`}
                   id={`category-${idx}`}
                 >
@@ -372,6 +378,7 @@ export default function App() {
               {activeModule === "Facility Tracker" && <FacilityTrackerModule onBack={() => setActiveModule(null)} />}
               {activeModule === "Support" && <SupportModule onBack={() => setActiveModule(null)} />}
               {activeModule === "Security" && <SecurityModule onBack={() => setActiveModule(null)} />}
+              {activeModule === "Notification Tester" && <NotificationTesterModule onBack={() => setActiveModule(null)} />}
             </motion.div>
           )}
         </AnimatePresence>
