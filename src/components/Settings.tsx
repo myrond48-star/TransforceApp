@@ -33,6 +33,7 @@ import {
 interface SettingsProps {
   initialModule?: string;
   initialTab?: string;
+  hideModuleSwitcher?: boolean;
 }
 
 const SHIFT_DEFAULTS: Record<string, { s: string; e: string; w: number }> = {
@@ -75,7 +76,7 @@ const DEFAULT_PROJECT_CHANNELS: Record<string, string[]> = {
   "VIP Concierge": ["Digital", "Call", "Email"],
 };
 
-export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab }) => {
+export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab, hideModuleSwitcher }) => {
   const { settings, updateSettings, syncSettingsFromDB } = useAppStore();
   const [activeModule, setActiveModule] = useState(initialModule || 'workforce');
   const [activeTab, setActiveTab] = useState(initialTab || 'shift');
@@ -972,18 +973,22 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
       <div className="max-w-7xl mx-auto">
         {/* Module Switcher Header & Save Button aligned at top */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 mb-10">
-          <div className="flex flex-wrap gap-2 bg-white p-2 rounded-2xl border border-gray-100 shadow-sm w-fit sticky top-0 md:relative z-30">
-            {modules.map((m) => (
-              <button
-                key={m.id}
-                onClick={() => handleModuleSwitch(m.id)}
-                className={`flex items-center gap-2.5 px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeModule === m.id ? 'bg-slate-950 text-white shadow-xl shadow-slate-200 scale-105' : 'text-slate-400 hover:text-slate-950 hover:bg-slate-50'}`}
-              >
-                <m.icon size={16} />
-                {m.label}
-              </button>
-            ))}
-          </div>
+          {!hideModuleSwitcher ? (
+            <div className="flex flex-wrap gap-2 bg-white p-2 rounded-2xl border border-gray-100 shadow-sm w-fit sticky top-0 md:relative z-30">
+              {modules.map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => handleModuleSwitch(m.id)}
+                  className={`flex items-center gap-2.5 px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeModule === m.id ? 'bg-slate-950/[0.08] text-slate-950 scale-105' : 'text-slate-400 hover:text-slate-950 hover:bg-slate-50'}`}
+                >
+                  <m.icon size={16} />
+                  {m.label}
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div />
+          )}
 
           <div className="flex items-center gap-3 w-full lg:w-auto px-1">
             {activeModule === 'workforce' && (
@@ -1031,7 +1036,7 @@ export const Settings: React.FC<SettingsProps> = ({ initialModule, initialTab })
                 ].map(tab => (
                   <button 
                     key={tab.id}
-                    className={`min-w-fit px-5 py-3 font-black text-[10px] uppercase tracking-widest rounded-xl transition-all whitespace-nowrap flex items-center gap-2.5 ${activeTab === tab.id ? 'bg-slate-950 text-white shadow-md' : 'text-slate-400 hover:text-slate-900 hover:bg-slate-100'}`} 
+                    className={`min-w-fit px-5 py-3 font-black text-[10px] uppercase tracking-widest rounded-xl transition-all whitespace-nowrap flex items-center gap-2.5 ${activeTab === tab.id ? 'bg-slate-950/[0.08] text-slate-950 shadow-none' : 'text-slate-400 hover:text-slate-900 hover:bg-slate-100'}`} 
                     onClick={() => setActiveTab(tab.id)}
                   >
                     <tab.icon size={14} />

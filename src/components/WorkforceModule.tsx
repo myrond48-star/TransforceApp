@@ -28,8 +28,22 @@ import {
   UserCircle,
   LayoutDashboard,
   Info,
-  Trash2
+  Trash2,
+  Calculator,
+  HelpCircle,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Settings as SettingsIcon,
+  PhoneIncoming,
+  PhoneOutgoing,
+  Activity,
+  Target,
+  Coins,
+  CreditCard,
+  Wallet,
+  DollarSign
 } from "lucide-react";
+import { Settings as SettingsPanel } from "./Settings.tsx";
 import { 
   XAxis, 
   YAxis, 
@@ -158,6 +172,7 @@ const reqData = Array.from({ length: 96 }).map((_, i) => {
 
 export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
   const [activeTab, setActiveTab] = useState("schedule");
+  const [isNavVisible, setIsNavVisible] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [selectedTeam, setSelectedTeam] = useState("all");
@@ -165,6 +180,45 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
   const [selectedUnit, setSelectedUnit] = useState("all");
   const [selectedProject, setSelectedProject] = useState("all");
   const settings = useAppStore(state => state.settings);
+
+  // --- FTE Calculator States ---
+  const [fteTab, setFteTab] = useState<"inbound" | "outbound">("inbound");
+  const [isFteDropdownOpen, setIsFteDropdownOpen] = useState(false);
+  
+  // --- Forecast Dropdown States ---
+
+  const [fteMode, setFteMode] = useState<"workload" | "erlang">("workload");
+  const [fteVolumeBase, setFteVolumeBase] = useState<"daily" | "weekly" | "monthly">("weekly");
+  const [fteVolume, setFteVolume] = useState<number>(15000);
+  const [fteAht, setFteAht] = useState<number>(240); // in seconds
+  const [fteShrinkage, setFteShrinkage] = useState<number>(25); // in %
+  const [fteOccupancy, setFteOccupancy] = useState<number>(85); // in %
+  const [fteWeekHours, setFteWeekHours] = useState<number>(40); // 1 FTE hours per week
+  const [fteWorkDays, setFteWorkDays] = useState<number>(5); // 5 days a week
+
+  // Outbound States
+  const [outboundLeads, setOutboundLeads] = useState<number>(5000);
+  const [outboundLeadsBase, setOutboundLeadsBase] = useState<"daily" | "weekly" | "monthly">("weekly");
+  const [outboundAttempts, setOutboundAttempts] = useState<number>(1.5);
+  const [outboundAht, setOutboundAht] = useState<number>(185); // in seconds
+  const [outboundConnectRate, setOutboundConnectRate] = useState<number>(35); // in %
+  const [outboundShrinkage, setOutboundShrinkage] = useState<number>(25); // in %
+  const [outboundOccupancy, setOutboundOccupancy] = useState<number>(85); // in %
+  const [outboundWeekHours, setOutboundWeekHours] = useState<number>(40);
+  const [outboundWorkDays, setOutboundWorkDays] = useState<number>(5);
+
+  // Erlang C States
+  const [erlangArrivals, setErlangArrivals] = useState<number>(250); // arrivals per hour
+  const [erlangAht, setErlangAht] = useState<number>(240); // handling time in seconds
+  const [erlangTargetSla, setErlangTargetSla] = useState<number>(20); // SLA target seconds (e.g. 20s)
+  const [erlangTargetSlaPct, setErlangTargetSlaPct] = useState<number>(80); // SLA target percentage (e.g. 80%)
+  const [erlangShrinkage, setErlangShrinkage] = useState<number>(25); // in %
+
+  // Price Per Month, Price Per Hour, Price Per Interaction (PPM, PPH, PPI) Billing & Pricing States
+  const [ppmCostPerAgent, setPpmCostPerAgent] = useState<number>(1200); // Monthly billable seat rate
+  const [ppmFixedFee, setPpmFixedFee] = useState<number>(5000); // Monthly platform fixed overhead
+  const [pphRate, setPphRate] = useState<number>(28); // Billing rate per man-hour
+  const [ppiRate, setPpiRate] = useState<number>(1.65); // Transaction pricing per interaction (PPI)
 
   const getActivityDef = (code: string, agentProj?: string) => {
     const projKey = (selectedProject && selectedProject !== "all") 
@@ -1706,29 +1760,6 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
 
     return (
       <div className="space-y-6 sm:space-y-8">
-        {/* Quick Stats Banner */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-          {[
-            { label: "Overall Adherence", value: "94.8%", trend: "+2.1%", icon: CheckCircle2, color: "text-green-600" },
-            { label: "Current Service Level", value: "88.2%", trend: "-1.5%", icon: Zap, color: "text-active-red" },
-            { label: "Total Headcount", value: String(filteredCount), trend: filteredCount > 20 ? "+12" : "0", icon: Users, color: "text-black" },
-            { label: "Resource Gap", value: "-04", trend: "Critical", icon: AlertCircle, color: "text-active-red" },
-          ].map((stat, i) => (
-            <div key={i} className="bg-white p-4 sm:p-5 rounded-2xl border border-gray-100 shadow-sm flex items-center justify-between">
-              <div>
-                <p className="text-[9px] sm:text-[10px] font-bold text-neutral-gray uppercase tracking-widest mb-1">{stat.label}</p>
-                <p className="text-xl sm:text-2xl font-black text-black">{stat.value}</p>
-                <p className={`text-[9px] sm:text-[10px] font-bold mt-1 ${stat.trend.startsWith('+') ? 'text-green-600' : 'text-active-red'}`}>
-                  {stat.trend} <span className="text-gray-300 font-medium hidden xs:inline">vs target</span>
-                </p>
-              </div>
-              <div className="p-2.5 sm:p-3 bg-gray-50 rounded-xl">
-                <stat.icon className={`w-4 sm:w-5 h-4 sm:h-5 ${stat.color} stroke-[1.5]`} />
-              </div>
-            </div>
-          ))}
-        </div>
-
         <div className="bg-white rounded-2xl sm:rounded-3xl border border-gray-100 shadow-sm overflow-hidden flex flex-col">
           {/* Grid Toolbar */}
           <div className="p-4 sm:p-6 border-b border-gray-50 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -4807,131 +4838,689 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
     );
   };
 
-  const renderForecasting = () => (
-    <div className="space-y-6 sm:space-y-8">
-       <div className="bg-white p-6 sm:p-10 rounded-2xl sm:rounded-[40px] border border-gray-100 shadow-sm relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-40 sm:w-64 h-40 sm:h-64 bg-active-red/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl pointer-events-none" />
-        
-        <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 sm:mb-12 gap-6 relative">
-          <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 bg-slate-900 text-slate-100 px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-[0.2em] mb-2 shadow-lg backdrop-blur-md">
-              <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              Real-time Simulation Active
-            </div>
-            <h3 className="text-3xl sm:text-5xl font-black text-slate-950 tracking-tighter uppercase leading-none italic">
-              Coverage <span className="text-rose-600">Intelligence</span>
-            </h3>
-            <p className="text-slate-400 text-[10px] sm:text-xs font-black uppercase tracking-[0.3em] mt-2 flex items-center gap-3">
-              <Database size={12} /> Resource Capacity & Demand Calibration
-            </p>
-          </div>
-          
-          <div className="flex gap-8 group">
-             <div className="text-right">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Forecast Precision</p>
-                <p className="text-3xl sm:text-4xl font-black text-slate-950 tracking-tighter group-hover:text-indigo-600 transition-colors">99.2%</p>
-             </div>
-             <div className="h-10 w-px bg-slate-100 self-center" />
-             <div className="text-right">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Service Risk</p>
-                <div className="flex items-center gap-2 justify-end">
-                   <p className="text-3xl sm:text-4xl font-black text-rose-600 tracking-tighter">LOW</p>
-                   <div className="w-3 h-3 rounded-full bg-emerald-500" />
-                </div>
-             </div>
-          </div>
-        </div>
-        
-        {/* Simplified Chart Legend */}
-        <div className="flex flex-wrap gap-6 mb-4">
-           <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-[#6366f1]" />
-              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Customer Demand</span>
-           </div>
-           <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-[#10b981]" />
-              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Staffing Level</span>
-           </div>
-           <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-rose-500/30" />
-              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Resource Shortfall</span>
-           </div>
-        </div>
+  const renderPPMForecast = () => {
+    const ppmData = dynamicReqData.map(item => {
+      const actualStaffed = item.actual || 0;
+      const targetStaffed = item.req || 0;
+      
+      const actualMonthPrice = parseFloat((actualStaffed * ppmCostPerAgent + ppmFixedFee).toFixed(2));
+      const targetMonthPrice = parseFloat((targetStaffed * ppmCostPerAgent + ppmFixedFee).toFixed(2));
+      const variationPrice = parseFloat(Math.abs(actualMonthPrice - targetMonthPrice).toFixed(2));
 
-        <div className="h-[250px] sm:h-[350px] w-full mt-8">
-          <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={dynamicReqData} margin={{ top: 20, right: 20, left: 0, bottom: 20 }}>
-              <defs>
-                <linearGradient id="colorStaffed" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
-                </linearGradient>
-                <linearGradient id="colorGap" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#ef4444" stopOpacity={0.4}/>
-                  <stop offset="90%" stopColor="#ef4444" stopOpacity={0.1}/>
-                </linearGradient>
-              </defs>
-              <XAxis 
-                dataKey="time" 
-                axisLine={false} 
-                tickLine={false} 
-                tick={{ fontSize: 10, fontWeight: 900, fill: '#64748b' }} 
-                interval={7} 
-                dy={15}
-              />
-              <YAxis 
-                axisLine={false} 
-                tickLine={false} 
-                tick={{ fontSize: 10, fontWeight: 900, fill: '#64748b' }} 
-                dx={-10}
-              />
-              <Tooltip 
-                contentStyle={{ 
-                  borderRadius: '24px', 
-                  border: '1px solid #e2e8f0', 
-                  padding: '24px', 
-                  boxShadow: '0 25px 50px -12px rgba(0,0,0,0.15)',
-                  backgroundColor: 'rgba(255,255,255,0.98)',
-                  backdropFilter: 'blur(12px)'
-                }}
-                itemStyle={{ textTransform: 'uppercase', fontWeight: '900', fontSize: '11px', padding: '6px 0' }}
-                cursor={{ stroke: '#cbd5e1', strokeWidth: 1 }}
-              />
-              {/* Demand Line */}
-              <Line 
-                type="monotone" 
-                dataKey="req" 
-                name="Demand Threshold" 
-                stroke="#6366f1" 
-                strokeWidth={2} 
-                dot={false}
-                activeDot={false}
-              />
-              {/* Staffed Area */}
-              <Area 
-                type="monotone" 
-                dataKey="actual" 
-                name="Staffed Resources" 
-                stroke="#10b981" 
-                strokeWidth={4} 
-                fillOpacity={1} 
-                fill="url(#colorStaffed)" 
-                activeDot={{ r: 8, strokeWidth: 4, stroke: '#fff', fill: '#10b981' }}
-              />
-              {/* Gap Highlights (Red Bars) */}
-              <Bar 
-                dataKey="gap" 
-                name="Understaffing Gap" 
-                fill="url(#colorGap)" 
-                radius={[4, 4, 0, 0]}
-                barSize={12}
-              />
-            </ComposedChart>
-          </ResponsiveContainer>
+      return {
+        ...item,
+        actualPrice: actualMonthPrice,
+        targetPrice: targetMonthPrice,
+        savingOrDeficit: actualMonthPrice < targetMonthPrice ? -variationPrice : variationPrice
+      };
+    });
+
+    const avgActualStaff = dynamicReqData.reduce((acc, curr) => acc + (curr.actual || 0), 0) / dynamicReqData.length;
+    const avgTargetStaff = dynamicReqData.reduce((acc, curr) => acc + (curr.req || 0), 0) / dynamicReqData.length;
+
+    const projectedMonthlyBilling = parseFloat((avgActualStaff * ppmCostPerAgent + ppmFixedFee).toFixed(2));
+    const targetMonthlyBilling = parseFloat((avgTargetStaff * ppmCostPerAgent + ppmFixedFee).toFixed(2));
+    const minAgentPPM = Math.min(...dynamicReqData.map(d => d.actual || 0)) * ppmCostPerAgent + ppmFixedFee;
+    const peakAgentPPM = Math.max(...dynamicReqData.map(d => d.actual || 0)) * ppmCostPerAgent + ppmFixedFee;
+
+    return (
+      <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-300" id="ppm-forecast-panel">
+        <div className="bg-white p-6 sm:p-10 rounded-2xl sm:rounded-[40px] border border-gray-100 shadow-sm relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-40 sm:w-64 h-40 sm:h-64 bg-indigo-600/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl pointer-events-none" />
+          
+          <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 sm:mb-12 gap-6 relative">
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-2 bg-slate-900 text-indigo-200 px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-[0.2em] mb-2 shadow-lg backdrop-blur-md">
+                <div className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+                Monthly Subscription & Seat Pricing
+              </div>
+              <h3 className="text-3xl sm:text-5xl font-black text-slate-950 tracking-tighter uppercase leading-none italic font-sans">
+                PPM <span className="text-indigo-600">Price Per Month</span>
+              </h3>
+              <p className="text-slate-400 text-[10px] sm:text-xs font-black uppercase tracking-[0.3em] mt-2 flex items-center gap-3">
+                <Coins size={12} /> Seats-Based Monthly Budget Plan
+              </p>
+            </div>
+            
+            <div className="flex gap-8 group">
+              <div className="text-right">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Projected Billing</p>
+                <p className="text-3xl sm:text-4xl font-black text-slate-950 tracking-tighter group-hover:text-indigo-600 transition-colors">
+                  ${projectedMonthlyBilling.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                </p>
+              </div>
+              <div className="h-10 w-px bg-slate-100 self-center" />
+              <div className="text-right">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">vs Required Target</p>
+                <p className="text-3xl sm:text-4xl font-black text-emerald-600 tracking-tighter">
+                  ${targetMonthlyBilling.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-6 bg-slate-50 rounded-2xl mb-8 border border-gray-100">
+            <div className="md:col-span-2 space-y-3">
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex justify-between">
+                  <span>Monthly Rate Per Agent (Seat)</span>
+                  <span className="text-indigo-600 font-bold">${ppmCostPerAgent} / SEAT</span>
+                </label>
+                <input 
+                  type="range" 
+                  min="200" 
+                  max="5000" 
+                  step="50"
+                  value={ppmCostPerAgent}
+                  onChange={(e) => setPpmCostPerAgent(parseInt(e.target.value))}
+                  className="w-full accent-indigo-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex justify-between">
+                  <span>Platform Fixed Service Overhead Fee</span>
+                  <span className="text-indigo-600 font-bold">${ppmFixedFee} / MONTH</span>
+                </label>
+                <input 
+                  type="range" 
+                  min="1000" 
+                  max="25000" 
+                  step="500"
+                  value={ppmFixedFee}
+                  onChange={(e) => setPpmFixedFee(parseInt(e.target.value))}
+                  className="w-full accent-indigo-600 h-1.5 bg-slate-200 rounded-lg cursor-pointer"
+                />
+              </div>
+            </div>
+            <div className="p-4 bg-white rounded-xl border border-gray-100">
+              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Minimum Seat Billing</p>
+              <p className="text-lg font-black text-slate-950">${minAgentPPM.toLocaleString("en-US", { maximumFractionDigits: 0 })}</p>
+              <p className="text-[8px] text-slate-400 font-bold">Overnight low staffing points</p>
+            </div>
+            <div className="p-4 bg-white rounded-xl border border-gray-100">
+              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Peak Shift Billing</p>
+              <p className="text-lg font-black text-rose-500">${peakAgentPPM.toLocaleString("en-US", { maximumFractionDigits: 0 })}</p>
+              <p className="text-[8px] text-slate-400 font-bold font-mono">Month-rate equivalent during high-staff peaks</p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-6 mb-4">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-[#10b981]" />
+              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Active Schedule Monthly Cost</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-[#818cf8]" />
+              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Target Required Monthly Cost</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-rose-500/20" />
+              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Schedule Delta Variance ($)</span>
+            </div>
+          </div>
+
+          <div className="h-[250px] sm:h-[350px] w-full mt-8">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={ppmData} margin={{ top: 20, right: 20, left: 0, bottom: 20 }}>
+                <defs>
+                  <linearGradient id="colorActualPPM" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                  </linearGradient>
+                  <linearGradient id="colorTargetPPM" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#818cf8" stopOpacity={0.1}/>
+                    <stop offset="95%" stopColor="#818cf8" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <XAxis 
+                  dataKey="time" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fontSize: 10, fontWeight: 900, fill: '#64748b' }} 
+                  interval={7} 
+                  dy={15}
+                />
+                <YAxis 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fontSize: 10, fontWeight: 900, fill: '#64748b' }} 
+                  dx={-10}
+                />
+                <Tooltip 
+                  contentStyle={{ 
+                    borderRadius: '24px', 
+                    border: '1px solid #e2e8f0', 
+                    padding: '24px', 
+                    boxShadow: '0 25px 50px -12px rgba(0,0,0,0.15)',
+                    backgroundColor: 'rgba(255,255,255,0.98)',
+                    backdropFilter: 'blur(12px)'
+                  }}
+                  itemStyle={{ textTransform: 'uppercase', fontWeight: '900', fontSize: '11px', padding: '6px 0' }}
+                  cursor={{ stroke: '#cbd5e1', strokeWidth: 1 }}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="targetPrice" 
+                  name="Required Target Fee" 
+                  stroke="#818cf8" 
+                  strokeWidth={2} 
+                  dot={false}
+                  activeDot={false}
+                />
+                <Area 
+                  type="monotone" 
+                  dataKey="actualPrice" 
+                  name="Scheduled Active Fee" 
+                  stroke="#10b981" 
+                  strokeWidth={4} 
+                  fillOpacity={1} 
+                  fill="url(#colorActualPPM)" 
+                  activeDot={{ r: 8, strokeWidth: 4, stroke: '#fff', fill: '#10b981' }}
+                />
+                <Bar 
+                  dataKey="savingOrDeficit" 
+                  name="Cost Delta vs Target" 
+                  fill="#ef4444" 
+                  opacity={0.3}
+                  radius={[4, 4, 0, 0]}
+                  barSize={12}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
+
+  const renderPPHForecast = () => {
+    // Each interval is 15 minutes, which is 0.25 of an hour
+    const pphData = dynamicReqData.map(item => {
+      const actualStaffed = item.actual || 0;
+      const targetStaffed = item.req || 0;
+      
+      const actualCost = parseFloat((actualStaffed * pphRate).toFixed(2));
+      const targetCost = parseFloat((targetStaffed * pphRate).toFixed(2));
+      const discrepancy = parseFloat((actualCost - targetCost).toFixed(2));
+
+      return {
+        ...item,
+        actualHourlyCost: actualCost,
+        targetHourlyCost: targetCost,
+        discrepancy
+      };
+    });
+
+    const sumActualIntervalSeats = dynamicReqData.reduce((acc, curr) => acc + (curr.actual || 0), 0);
+    const sumTargetIntervalSeats = dynamicReqData.reduce((acc, curr) => acc + (curr.req || 0), 0);
+    
+    // total daily billed man-hours is sum of staffed agents * 0.25 hour
+    const totalDailyBilledHours = parseFloat((sumActualIntervalSeats * 0.25).toFixed(1));
+    const totalDailyBilledCost = parseFloat((totalDailyBilledHours * pphRate).toFixed(2));
+    const targetDailyBilledCost = parseFloat(((sumTargetIntervalSeats * 0.25) * pphRate).toFixed(2));
+
+    const avgHourlyCost = parseFloat((pphData.reduce((acc, curr) => acc + curr.actualHourlyCost, 0) / pphData.length).toFixed(2));
+    const peakHourlyCost = parseFloat(Math.max(...pphData.map(d => d.actualHourlyCost)).toFixed(2));
+
+    return (
+      <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-300" id="pph-forecast-panel">
+        <div className="bg-white p-6 sm:p-10 rounded-2xl sm:rounded-[40px] border border-gray-100 shadow-sm relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-40 sm:w-64 h-40 sm:h-64 bg-emerald-600/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl pointer-events-none" />
+          
+          <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 sm:mb-12 gap-6 relative">
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-2 bg-slate-900 text-emerald-200 px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-[0.2em] mb-2 shadow-lg backdrop-blur-md">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                Hourly Labor Billing Rate (T&M)
+              </div>
+              <h3 className="text-3xl sm:text-5xl font-black text-slate-950 tracking-tighter uppercase leading-none italic font-sans">
+                PPH <span className="text-emerald-600">Price Per Hour</span>
+              </h3>
+              <p className="text-slate-400 text-[10px] sm:text-xs font-black uppercase tracking-[0.3em] mt-2 flex items-center gap-3">
+                <CreditCard size={12} /> Real-Time Billed Labor Outflow
+              </p>
+            </div>
+            
+            <div className="flex gap-8 group">
+              <div className="text-right">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Projected Daily Cost</p>
+                <p className="text-3xl sm:text-4xl font-black text-slate-950 tracking-tighter group-hover:text-emerald-500 transition-colors">
+                  ${totalDailyBilledCost.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                </p>
+              </div>
+              <div className="h-10 w-px bg-slate-100 self-center" />
+              <div className="text-right">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Active Man-Hours</p>
+                <p className="text-3xl sm:text-4xl font-black text-emerald-500 tracking-tighter">
+                  {totalDailyBilledHours} <span className="text-xs text-slate-400 font-bold">HRS/DAY</span>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-6 bg-slate-50 rounded-2xl mb-8 border border-gray-100">
+            <div className="md:col-span-2 space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex justify-between">
+                <span>Billable Hourly Rate Per Agent</span>
+                <span className="text-emerald-600 font-bold">${pphRate} USD / HOUR</span>
+              </label>
+              <input 
+                type="range" 
+                min="5" 
+                max="150" 
+                step="1"
+                value={pphRate}
+                onChange={(e) => setPphRate(parseInt(e.target.value))}
+                className="w-full accent-emerald-500 h-1.5 bg-slate-200 rounded-lg cursor-pointer"
+              />
+              <div className="flex justify-between text-[8px] text-slate-400 font-bold">
+                <span>$5 (OFFSHORE CHAT)</span>
+                <span>$28 (STANDARD WORKPLACE)</span>
+                <span>$150 (SPECIALIST CONSULTING)</span>
+              </div>
+            </div>
+            <div className="p-4 bg-white rounded-xl border border-gray-100">
+              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Average Labor Cost / Hr</p>
+              <p className="text-lg font-black text-slate-950">${avgHourlyCost.toLocaleString("en-US", { maximumFractionDigits: 0 })} / hr</p>
+              <p className="text-[8px] text-slate-400 font-bold">Mean workforce cost across day</p>
+            </div>
+            <div className="p-4 bg-white rounded-xl border border-gray-100">
+              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Peak Hour Cost Outflow</p>
+              <p className="text-lg font-black text-emerald-600">${peakHourlyCost.toLocaleString("en-US", { maximumFractionDigits: 0 })} / hr</p>
+              <p className="text-[8px] text-slate-400 font-bold font-mono">Billed during highest occupancy shift</p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-6 mb-4">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-[#10b981]" />
+              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Active Scheduled Cost Per Hour</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-slate-300" />
+              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">SLA Requirement Cost Per Hour</span>
+            </div>
+          </div>
+
+          <div className="h-[250px] sm:h-[350px] w-full mt-8">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={pphData} margin={{ top: 20, right: 20, left: 0, bottom: 20 }}>
+                <defs>
+                  <linearGradient id="colorPPH" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <XAxis 
+                  dataKey="time" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fontSize: 10, fontWeight: 900, fill: '#64748b' }} 
+                  interval={7} 
+                  dy={15}
+                />
+                <YAxis 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fontSize: 10, fontWeight: 900, fill: '#64748b' }} 
+                  dx={-10}
+                />
+                <Tooltip 
+                  contentStyle={{ 
+                    borderRadius: '24px', 
+                    border: '1px solid #e2e8f0', 
+                    padding: '24px', 
+                    boxShadow: '0 25px 50px -12px rgba(0,0,0,0.15)',
+                    backgroundColor: 'rgba(255,255,255,0.98)',
+                    backdropFilter: 'blur(12px)'
+                  }}
+                  itemStyle={{ textTransform: 'uppercase', fontWeight: '900', fontSize: '11px', padding: '6px 0' }}
+                  cursor={{ stroke: '#cbd5e1', strokeWidth: 1 }}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="targetHourlyCost" 
+                  name="Required SLA Target Labor Cost" 
+                  stroke="#cbd5e1" 
+                  strokeWidth={2} 
+                  strokeDasharray="5 5"
+                  dot={false}
+                  activeDot={false}
+                />
+                <Area 
+                  type="monotone" 
+                  dataKey="actualHourlyCost" 
+                  name="Scheduled Hourly Cost" 
+                  stroke="#10b981" 
+                  strokeWidth={4} 
+                  fillOpacity={1} 
+                  fill="url(#colorPPH)" 
+                  activeDot={{ r: 8, strokeWidth: 4, stroke: '#fff', fill: '#10b981' }}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderPPIForecast = () => {
+    const ppiData = dynamicReqData.map(item => {
+      // Each interval is 15 mins. Let's assume arrival interactions count is proportional to the required staff level
+      // E.g. each required staffing represents a load demand of 3.5 transactions per 15 minutes (14/hour per agent)
+      const inboundTransactions = Math.ceil((item.req || 0) * 3.5);
+      
+      // Active handled transactions are capped by scheduling capability
+      const maxCapableTransactions = Math.ceil((item.actual || 0) * 3.5);
+      const handledTransactions = Math.min(inboundTransactions, maxCapableTransactions);
+      
+      const unhandledTransactions = Math.max(0, inboundTransactions - handledTransactions);
+
+      const billingEarned = parseFloat((handledTransactions * ppiRate).toFixed(2));
+      const potentialBilling = parseFloat((inboundTransactions * ppiRate).toFixed(2));
+      const billingDeficit = parseFloat((unhandledTransactions * ppiRate).toFixed(2));
+
+      return {
+        ...item,
+        billingEarned,
+        potentialBilling,
+        billingDeficit,
+        transactions: inboundTransactions,
+        handled: handledTransactions
+      };
+    });
+
+    const totalInboundInteractions = ppiData.reduce((acc, curr) => acc + curr.transactions, 0);
+    const totalHandledInteractions = ppiData.reduce((acc, curr) => acc + curr.handled, 0);
+    const totalDailyRevenue = parseFloat((totalHandledInteractions * ppiRate).toFixed(2));
+    const totalPotentialRevenue = parseFloat((totalInboundInteractions * ppiRate).toFixed(2));
+    const revenueSlippage = parseFloat(((totalInboundInteractions - totalHandledInteractions) * ppiRate).toFixed(2));
+    
+    const fulfillmentAvgRate = totalInboundInteractions > 0 ? Math.round((totalHandledInteractions / totalInboundInteractions) * 100) : 100;
+
+    return (
+      <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-300" id="ppi-forecast-panel">
+        <div className="bg-white p-6 sm:p-10 rounded-2xl sm:rounded-[40px] border border-gray-100 shadow-sm relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-40 sm:w-64 h-40 sm:h-64 bg-violet-600/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl pointer-events-none" />
+          
+          <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 sm:mb-12 gap-6 relative">
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-2 bg-slate-900 text-violet-200 px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-[0.2em] mb-2 shadow-lg backdrop-blur-md">
+                <div className="w-2 h-2 rounded-full bg-violet-500 animate-pulse" />
+                Pay-Per-Transaction Billing Model
+              </div>
+              <h3 className="text-3xl sm:text-5xl font-black text-slate-950 tracking-tighter uppercase leading-none italic font-sans">
+                PPI <span className="text-violet-600">Price Per Interaction</span>
+              </h3>
+              <p className="text-slate-400 text-[10px] sm:text-xs font-black uppercase tracking-[0.3em] mt-2 flex items-center gap-3">
+                <Wallet size={12} /> SLA fulfillment & Dynamic ticket charge model
+              </p>
+            </div>
+            
+            <div className="flex gap-8 group">
+              <div className="text-right">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Projected Daily Earning</p>
+                <p className="text-3xl sm:text-4xl font-black text-slate-950 tracking-tighter group-hover:text-violet-500 transition-colors">
+                  ${totalDailyRevenue.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                </p>
+              </div>
+              <div className="h-10 w-px bg-slate-100 self-center" />
+              <div className="text-right">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Interaction Fulfillment</p>
+                <p className="text-3xl sm:text-4xl font-black text-violet-500 tracking-tighter">{fulfillmentAvgRate}%</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-6 bg-slate-50 rounded-2xl mb-8 border border-gray-100">
+            <div className="md:col-span-2 space-y-2">
+              <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex justify-between">
+                <span>Contract Billing Rate per Interaction</span>
+                <span className="text-violet-600 font-bold">${ppiRate.toFixed(2)} / CONTACT</span>
+              </label>
+              <input 
+                type="range" 
+                min="0.10" 
+                max="10.0" 
+                step="0.05"
+                value={ppiRate}
+                onChange={(e) => setPpiRate(parseFloat(e.target.value))}
+                className="w-full accent-violet-500 h-1.5 bg-slate-200 rounded-lg cursor-pointer"
+              />
+              <div className="flex justify-between text-[8px] text-slate-400 font-bold">
+                <span>$0.10 (ROBOTIC IVR / CHOTBOT)</span>
+                <span>$1.65 (STANDARD AGENT INTERACTION)</span>
+                <span>$10.00 (HIGH PREMIUM PHONE EXCLUSIONS)</span>
+              </div>
+            </div>
+            <div className="p-4 bg-white rounded-xl border border-gray-100">
+              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Slippage (Understaffing Loss)</p>
+              <p className="text-lg font-black text-rose-500">${revenueSlippage.toLocaleString("en-US", { maximumFractionDigits: 0 })}</p>
+              <p className="text-[8px] text-slate-400 font-bold font-mono">Lost due to agent bottleneck</p>
+            </div>
+            <div className="p-4 bg-white rounded-xl border border-gray-100">
+              <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1 font-sans">Daily interaction volume</p>
+              <p className="text-lg font-black text-slate-950">{totalInboundInteractions.toLocaleString("en-US")} texts</p>
+              <p className="text-[8px] text-slate-400 font-bold">Total arrivals based on actual requirements</p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-6 mb-4">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-indigo-400" />
+              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Potential Interaction Revenue ($)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-emerald-500" />
+              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Billed Interaction Revenue ($)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-rose-500/20" />
+              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Unserved Transaction Slippage ($)</span>
+            </div>
+          </div>
+
+          <div className="h-[250px] sm:h-[350px] w-full mt-8">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={ppiData} margin={{ top: 20, right: 20, left: 0, bottom: 20 }}>
+                <defs>
+                  <linearGradient id="colorEarnedPPI" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                  </linearGradient>
+                  <linearGradient id="colorGapPPI" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#ef4444" stopOpacity={0.4}/>
+                    <stop offset="90%" stopColor="#ef4444" stopOpacity={0.1}/>
+                  </linearGradient>
+                </defs>
+                <XAxis 
+                  dataKey="time" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fontSize: 10, fontWeight: 900, fill: '#64748b' }} 
+                  interval={7} 
+                  dy={15}
+                />
+                <YAxis 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fontSize: 10, fontWeight: 900, fill: '#64748b' }} 
+                  dx={-10}
+                />
+                <Tooltip 
+                  contentStyle={{ 
+                    borderRadius: '24px', 
+                    border: '1px solid #e2e8f0', 
+                    padding: '24px', 
+                    boxShadow: '0 25px 50px -12px rgba(0,0,0,0.15)',
+                    backgroundColor: 'rgba(255,255,255,0.98)',
+                    backdropFilter: 'blur(12px)'
+                  }}
+                  itemStyle={{ textTransform: 'uppercase', fontWeight: '900', fontSize: '11px', padding: '6px 0' }}
+                  cursor={{ stroke: '#cbd5e1', strokeWidth: 1 }}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="potentialBilling" 
+                  name="Potential Inbound Interaction Earning" 
+                  stroke="#818cf8" 
+                  strokeWidth={2} 
+                  dot={false}
+                  activeDot={false}
+                />
+                <Area 
+                  type="monotone" 
+                  dataKey="billingEarned" 
+                  name="Billed Interaction Revenue" 
+                  stroke="#10b981" 
+                  strokeWidth={4} 
+                  fillOpacity={1} 
+                  fill="url(#colorEarnedPPI)" 
+                  activeDot={{ r: 8, strokeWidth: 4, stroke: '#fff', fill: '#10b981' }}
+                />
+                <Bar 
+                  dataKey="billingDeficit" 
+                  name="Revenue Slippage Gap" 
+                  fill="url(#colorGapPPI)" 
+                  radius={[4, 4, 0, 0]}
+                  barSize={12}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderForecasting = () => {
+    return (
+      <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-300">
+         <div className="bg-white p-6 sm:p-10 rounded-2xl sm:rounded-[40px] border border-gray-100 shadow-sm relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-40 sm:w-64 h-40 sm:h-64 bg-slate-900/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-3xl pointer-events-none" />
+          
+          <div className="flex flex-col md:flex-row md:items-end justify-between mb-8 sm:mb-12 gap-6 relative">
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-2 bg-slate-900 text-slate-100 px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-[0.2em] mb-2 shadow-lg backdrop-blur-md">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                Real-time Simulation Active
+              </div>
+              <h3 className="text-3xl sm:text-5xl font-black text-slate-950 tracking-tighter uppercase leading-none italic font-sans animate-in fade-in">
+                Coverage <span className="text-rose-600">Intelligence</span>
+              </h3>
+              <p className="text-slate-400 text-[10px] sm:text-xs font-black uppercase tracking-[0.3em] mt-2 flex items-center gap-3">
+                <Database size={12} /> Resource Capacity & Demand Calibration
+              </p>
+            </div>
+            
+            <div className="flex gap-8 group">
+               <div className="text-right">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Forecast Precision</p>
+                  <p className="text-3xl sm:text-4xl font-black text-slate-950 tracking-tighter group-hover:text-indigo-600 transition-colors">99.2%</p>
+               </div>
+               <div className="h-10 w-px bg-slate-100 self-center" />
+               <div className="text-right">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Service Risk</p>
+                  <div className="flex items-center gap-2 justify-end">
+                     <p className="text-3xl sm:text-4xl font-black text-rose-600 tracking-tighter">LOW</p>
+                     <div className="w-3 h-3 rounded-full bg-emerald-500" />
+                  </div>
+               </div>
+            </div>
+          </div>
+          
+          {/* Simplified Chart Legend */}
+          <div className="flex flex-wrap gap-6 mb-4">
+             <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-[#6366f1]" />
+                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Customer Demand</span>
+             </div>
+             <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-[#10b981]" />
+                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Staffing Level</span>
+             </div>
+             <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-rose-500/30" />
+                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Resource Shortfall</span>
+             </div>
+          </div>
+  
+          <div className="h-[250px] sm:h-[350px] w-full mt-8">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={dynamicReqData} margin={{ top: 20, right: 20, left: 0, bottom: 20 }}>
+                <defs>
+                  <linearGradient id="colorStaffed" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                  </linearGradient>
+                  <linearGradient id="colorGap" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#ef4444" stopOpacity={0.4}/>
+                    <stop offset="90%" stopColor="#ef4444" stopOpacity={0.1}/>
+                  </linearGradient>
+                </defs>
+                <XAxis 
+                  dataKey="time" 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fontSize: 10, fontWeight: 900, fill: '#64748b' }} 
+                  interval={7} 
+                  dy={15}
+                />
+                <YAxis 
+                  axisLine={false} 
+                  tickLine={false} 
+                  tick={{ fontSize: 10, fontWeight: 900, fill: '#64748b' }} 
+                  dx={-10}
+                />
+                <Tooltip 
+                  contentStyle={{ 
+                    borderRadius: '24px', 
+                    border: '1px solid #e2e8f0', 
+                    padding: '24px', 
+                    boxShadow: '0 25px 50px -12px rgba(0,0,0,0.15)',
+                    backgroundColor: 'rgba(255,255,255,0.98)',
+                    backdropFilter: 'blur(12px)'
+                  }}
+                  itemStyle={{ textTransform: 'uppercase', fontWeight: '900', fontSize: '11px', padding: '6px 0' }}
+                  cursor={{ stroke: '#cbd5e1', strokeWidth: 1 }}
+                />
+                {/* Demand Line */}
+                <Line 
+                  type="monotone" 
+                  dataKey="req" 
+                  name="Demand Threshold" 
+                  stroke="#6366f1" 
+                  strokeWidth={2} 
+                  dot={false}
+                  activeDot={false}
+                />
+                {/* Staffed Area */}
+                <Area 
+                  type="monotone" 
+                  dataKey="actual" 
+                  name="Staffed Resources" 
+                  stroke="#10b981" 
+                  strokeWidth={4} 
+                  fillOpacity={1} 
+                  fill="url(#colorStaffed)" 
+                  activeDot={{ r: 8, strokeWidth: 4, stroke: '#fff', fill: '#10b981' }}
+                />
+                {/* Gap Highlights (Red Bars) */}
+                <Bar 
+                  dataKey="gap" 
+                  name="Understaffing Gap" 
+                  fill="url(#colorGap)" 
+                  radius={[4, 4, 0, 0]}
+                  barSize={12}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      </div>
+    );
+  };
 
   const renderHistorical = () => {
     const days = getDaysArray(histStartDate, histEndDate);
@@ -5878,6 +6467,1102 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
     );
   };
 
+  const renderOutboundCalculator = (subNavBar?: React.ReactNode) => {
+    // Outbound Math
+    let outboundPeriodLabel = "Weekly";
+    if (outboundLeadsBase === "daily") outboundPeriodLabel = "Daily";
+    if (outboundLeadsBase === "monthly") outboundPeriodLabel = "Monthly";
+
+    // Convert leads to weekly for standardized math, or scale accordingly
+    let weeklyLeads = outboundLeads;
+    if (outboundLeadsBase === "daily") {
+      weeklyLeads = outboundLeads * outboundWorkDays;
+    } else if (outboundLeadsBase === "monthly") {
+      weeklyLeads = outboundLeads / 4.33;
+    }
+
+    const totalDialsWeekly = weeklyLeads * outboundAttempts;
+    const connectedCallsWeekly = totalDialsWeekly * (outboundConnectRate / 100);
+    const unconnectedCallsWeekly = totalDialsWeekly * (1 - outboundConnectRate / 100);
+
+    const connectedHoursWeekly = (connectedCallsWeekly * outboundAht) / 3600;
+    // Assume average dial/unconnected attempts duration is 15 seconds
+    const unconnectedHoursWeekly = (unconnectedCallsWeekly * 15) / 3600;
+    const totalOutboundHoursWeekly = connectedHoursWeekly + unconnectedHoursWeekly;
+
+    const baseOutboundFte = totalOutboundHoursWeekly / outboundWeekHours;
+    const occupancyOutboundFte = baseOutboundFte / (outboundOccupancy / 100);
+    const grossOutboundFte = occupancyOutboundFte / (1 - outboundShrinkage / 100);
+
+    // Scaling for display values
+    let displayTotalLeads = outboundLeads;
+    let displayTotalDials = totalDialsWeekly;
+    let displayConnected = connectedCallsWeekly;
+    let displayOutboundHours = totalOutboundHoursWeekly;
+    let displayBaseOutboundFte = baseOutboundFte;
+    let displayOccOutboundFte = occupancyOutboundFte;
+    let displayGrossOutboundFte = grossOutboundFte;
+
+    if (outboundLeadsBase === "daily") {
+      displayTotalDials = totalDialsWeekly / outboundWorkDays;
+      displayConnected = connectedCallsWeekly / outboundWorkDays;
+      displayOutboundHours = totalOutboundHoursWeekly / outboundWorkDays;
+      displayBaseOutboundFte = baseOutboundFte / outboundWorkDays;
+      displayOccOutboundFte = occupancyOutboundFte / outboundWorkDays;
+      displayGrossOutboundFte = grossOutboundFte / outboundWorkDays;
+    } else if (outboundLeadsBase === "monthly") {
+      displayTotalDials = totalDialsWeekly * 4.33;
+      displayConnected = connectedCallsWeekly * 4.33;
+      displayOutboundHours = totalOutboundHoursWeekly * 4.33;
+      displayBaseOutboundFte = baseOutboundFte * 4.33;
+      displayOccOutboundFte = occupancyOutboundFte * 4.33;
+      displayGrossOutboundFte = grossOutboundFte * 4.33;
+    }
+
+    // Connect Rate Sensitivity chart data
+    const outboundConnectChartData = Array.from({ length: 11 }).map((_, i) => {
+      const connRate = i * 10; // 0% to 100%
+      const dials = weeklyLeads * outboundAttempts;
+      const conn = dials * (connRate / 100);
+      const unconn = dials * (1 - connRate / 100);
+      const hrs = ((conn * outboundAht) + (unconn * 15)) / 3600;
+      const bFte = hrs / outboundWeekHours;
+      const oFte = bFte / (outboundOccupancy / 100);
+      const gFte = oFte / (1 - outboundShrinkage / 100);
+
+      let scaleG = gFte;
+      if (outboundLeadsBase === "daily") scaleG = gFte / outboundWorkDays;
+      else if (outboundLeadsBase === "monthly") scaleG = gFte * 4.33;
+
+      return {
+        rate: `${connRate}%`,
+        "FTE Needed": parseFloat(scaleG.toFixed(1)),
+        "Connected": Math.round(conn / (outboundLeadsBase === "daily" ? outboundWorkDays : outboundLeadsBase === "monthly" ? 0.231 : 1))
+      };
+    });
+
+    const handleCopyReport = () => {
+      const reportText = `--- OUTBOUND CAMPAIGN STAFFING REPORT ---
+Period: ${outboundPeriodLabel} Basis
+Target Leads/Contacts: ${outboundLeads.toLocaleString()}
+Attempts per Lead: ${outboundAttempts}
+Average Handling Time (AHT) of Engaged Calls: ${outboundAht} seconds
+Connect / Answer Rate Target: ${outboundConnectRate}%
+Dial Action Overhead (unengaged): 15 seconds
+Productive Week Hours per FTE: ${outboundWeekHours} hours
+Workdays per Week: ${outboundWorkDays} days
+
+Target Occupancy: ${outboundOccupancy}%
+Shrinkage Rate: ${outboundShrinkage}%
+
+--- CALCULATION RESULTS ---
+Total Dial Attempts: ${Math.round(displayTotalDials).toLocaleString()}
+Connected / Engaged Calls: ${Math.round(displayConnected).toLocaleString()}
+Dialer & Talk Effort: ${displayOutboundHours.toFixed(1)} Hours
+Base FTEs Needed (100% Occupancy): ${displayBaseOutboundFte.toFixed(2)} FTE
+Occupancy-Adjusted FTEs Needed: ${displayOccOutboundFte.toFixed(2)} FTE
+Gross FTEs Needed (With Shrinkage): ${displayGrossOutboundFte.toFixed(2)} FTE
+Recommended Headcount: ${Math.ceil(displayGrossOutboundFte)} Personnel
+`;
+      navigator.clipboard.writeText(reportText);
+      showNotification("Outbound Report copied! 📋", "success");
+    };
+
+    return (
+      <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-500">
+
+        {/* Module Header */}
+        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-gray-100 shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-6">
+          <div className="space-y-1">
+            <div className="italic inline-flex items-center gap-1.5 bg-neutral-900 text-neutral-100 px-3 py-1 rounded-full text-[8.5px] font-black uppercase tracking-widest">
+              <Calculator size={11} className="text-active-red shrink-0" />
+              Calculations Engine v2.1 (Outbound)
+            </div>
+            <h3 className="text-xl sm:text-2xl font-black text-black tracking-tight uppercase">FTE & Capacity (Outbound)</h3>
+            <p className="text-neutral-gray text-[10px] font-bold uppercase tracking-widest leading-relaxed">Model outbound dialing campaigns, connection rates, and roster overheads</p>
+          </div>
+          <div className="bg-amber-50 border border-amber-100 text-amber-800 text-[10px] font-semibold uppercase tracking-wider px-4 py-2 rounded-xl flex items-center gap-2">
+            📢 Dialer Mode: Predictive / Power Campaign
+          </div>
+        </div>
+
+        {/* Content Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 items-start">
+          
+          {/* LEFT inputs: Parameters Form */}
+          <div className="lg:col-span-4 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-5">
+            <div className="border-b border-gray-50 pb-3">
+              <h4 className="text-[12px] font-black text-black uppercase tracking-widest">Dialer & Campaign SLA</h4>
+              <p className="text-[9px] text-neutral-gray font-bold uppercase tracking-tight mt-1">Adjust parameters to simulate campaign staff</p>
+            </div>
+
+            {/* Leads period selection */}
+            <div className="space-y-1.5">
+              <label className="text-[9px] font-extrabold text-neutral-gray uppercase tracking-widest">Campaign Lead Period</label>
+              <div className="grid grid-cols-3 gap-1">
+                {(["daily", "weekly", "monthly"] as const).map((base) => (
+                  <button
+                    key={base}
+                    type="button"
+                    onClick={() => setOutboundLeadsBase(base)}
+                    className={`py-1.5 rounded-lg text-[8px] sm:text-[9px] font-extrabold uppercase tracking-widest transition-all ${
+                      outboundLeadsBase === base ? "bg-black text-white" : "bg-gray-50 text-neutral-gray hover:text-black border border-gray-100"
+                    }`}
+                  >
+                    {base}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Lead Volume */}
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center text-[9px] tracking-widest uppercase">
+                <span className="font-extrabold text-neutral-gray">Target Lead Volume</span>
+                <span className="font-black text-black">{outboundLeads.toLocaleString()} Leads</span>
+              </div>
+              <input
+                type="range"
+                min="100"
+                max="50000"
+                step="500"
+                value={outboundLeads}
+                onChange={(e) => setOutboundLeads(Number(e.target.value))}
+                className="w-full accent-black h-1 bg-gray-100 rounded-lg appearance-none cursor-pointer"
+              />
+              <input
+                type="number"
+                value={outboundLeads}
+                onChange={(e) => setOutboundLeads(Math.max(1, Number(e.target.value)))}
+                className="w-full bg-gray-50 text-[10px] sm:text-[11px] font-mono font-bold uppercase tracking-widest border border-gray-100 rounded-xl px-4 py-2 text-slate-700 focus:outline-none"
+              />
+            </div>
+
+            {/* Attempts per lead */}
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center text-[9px] tracking-widest uppercase">
+                <span className="font-extrabold text-neutral-gray">Attempts per Lead</span>
+                <span className="font-black text-black">{outboundAttempts.toFixed(1)} Dials</span>
+              </div>
+              <input
+                type="range"
+                min="1"
+                max="10"
+                step="0.1"
+                value={outboundAttempts}
+                onChange={(e) => setOutboundAttempts(Number(e.target.value))}
+                className="w-full accent-black h-1 bg-gray-100 rounded-lg appearance-none cursor-pointer"
+              />
+            </div>
+
+            {/* Connected AHT */}
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center text-[9px] tracking-widest uppercase">
+                <span className="font-extrabold text-neutral-gray">Engaged Call AHT (secs)</span>
+                <span className="font-black text-black">{outboundAht} seconds</span>
+              </div>
+              <input
+                type="range"
+                min="10"
+                max="600"
+                step="5"
+                value={outboundAht}
+                onChange={(e) => setOutboundAht(Number(e.target.value))}
+                className="w-full accent-black h-1 bg-gray-100 rounded-lg appearance-none cursor-pointer"
+              />
+            </div>
+
+            {/* Connect / Answer Rate */}
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center text-[9px] tracking-widest uppercase">
+                <span className="font-extrabold text-neutral-gray">Connect/Answer Rate %</span>
+                <span className="font-black text-black">{outboundConnectRate}%</span>
+              </div>
+              <input
+                type="range"
+                min="5"
+                max="100"
+                step="1"
+                value={outboundConnectRate}
+                onChange={(e) => setOutboundConnectRate(Number(e.target.value))}
+                className="w-full accent-black h-1 bg-gray-100 rounded-lg appearance-none cursor-pointer"
+              />
+            </div>
+
+            {/* Occupancy */}
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center text-[9px] tracking-widest uppercase">
+                <span className="font-extrabold text-neutral-gray">Target Occupancy %</span>
+                <span className="font-black text-black">{outboundOccupancy}%</span>
+              </div>
+              <input
+                type="range"
+                min="50"
+                max="100"
+                step="1"
+                value={outboundOccupancy}
+                onChange={(e) => setOutboundOccupancy(Number(e.target.value))}
+                className="w-full accent-black h-1 bg-gray-100 rounded-lg appearance-none cursor-pointer"
+              />
+            </div>
+
+            {/* Shrinkage */}
+            <div className="space-y-1.5">
+              <div className="flex justify-between items-center text-[9px] tracking-widest uppercase">
+                <span className="font-extrabold text-neutral-gray">Campaign Shrinkage %</span>
+                <span className="font-black text-black">{outboundShrinkage}%</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="50"
+                step="1"
+                value={outboundShrinkage}
+                onChange={(e) => setOutboundShrinkage(Number(e.target.value))}
+                className="w-full accent-black h-1 bg-gray-100 rounded-lg appearance-none cursor-pointer"
+              />
+            </div>
+
+            {/* Contract variables */}
+            <div className="grid grid-cols-2 gap-3.5 pt-2 border-t border-gray-50">
+              <div className="space-y-1.5">
+                <label className="text-[8.5px] font-extrabold text-neutral-gray uppercase tracking-widest block font-bold">Contract Hours/Week</label>
+                <input
+                  type="number"
+                  min="30"
+                  max="48"
+                  value={outboundWeekHours}
+                  onChange={(e) => setOutboundWeekHours(Math.max(30, Math.min(48, Number(e.target.value))))}
+                  className="w-full bg-gray-50 text-[10px] sm:text-[11px] font-mono font-bold border border-gray-100 rounded-xl px-3 py-2 text-slate-700 animate-none"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-[8.5px] font-extrabold text-neutral-gray uppercase tracking-widest block font-bold">Workdays/Week</label>
+                <input
+                  type="number"
+                  min="4"
+                  max="7"
+                  value={outboundWorkDays}
+                  onChange={(e) => setOutboundWorkDays(Math.max(4, Math.min(7, Number(e.target.value))))}
+                  className="w-full bg-gray-50 text-[10px] sm:text-[11px] font-mono font-bold border border-gray-100 rounded-xl px-3 py-2 text-slate-700 animate-none"
+                />
+              </div>
+            </div>
+
+            <button
+              onClick={handleCopyReport}
+              className="w-full mt-4 py-3 bg-black hover:bg-neutral-800 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-md flex items-center justify-center gap-2"
+            >
+              <Download size={13} /> Export Campaigns report
+            </button>
+          </div>
+
+          {/* RIGHT: Results display Dashboard */}
+          <div className="lg:col-span-8 space-y-6 sm:space-y-8">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-in fade-in zoom-in-95 duration-300">
+              <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm relative group hover:border-black transition-all">
+                <p className="text-[8px] sm:text-[9.5px] font-bold text-neutral-gray uppercase tracking-widest mb-1">Total Attempts</p>
+                <p className="text-xl sm:text-2xl font-black text-black tracking-tight">{Math.round(displayTotalDials).toLocaleString()}</p>
+                <p className="text-[8px] font-semibold text-neutral-gray uppercase mt-1">Per {outboundPeriodLabel.toLowerCase()}</p>
+              </div>
+              <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm relative group hover:border-black transition-all">
+                <p className="text-[8px] sm:text-[9.5px] font-bold text-neutral-gray uppercase tracking-widest mb-1 font-bold">Engaged Leads</p>
+                <p className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight">{Math.round(displayConnected).toLocaleString()}</p>
+                <p className="text-[8px] font-semibold text-green-700 bg-green-50 px-1 py-0.5 rounded-md inline-block uppercase mt-1">
+                  Connect: {outboundConnectRate}%
+                </p>
+              </div>
+              <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm relative group hover:border-black transition-all">
+                <p className="text-[8px] sm:text-[9.5px] font-bold bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded-md inline-block uppercase tracking-widest mb-1">Effort Load</p>
+                <p className="text-xl sm:text-2xl font-black text-indigo-700 tracking-tight">{displayOutboundHours.toFixed(1)} hrs</p>
+                <p className="text-[8px] font-semibold text-neutral-gray uppercase mt-1">Talk & Dial latency Included</p>
+              </div>
+              <div className="bg-slate-950 p-5 rounded-3xl shadow-lg relative group border border-slate-900 transition-all text-white">
+                <p className="text-[8px] sm:text-[9.5px] font-bold text-rose-500 uppercase tracking-widest mb-1">Required FTE</p>
+                <p className="text-xl sm:text-2xl font-black text-white tracking-tight">{displayGrossOutboundFte.toFixed(2)}</p>
+                <p className="text-[8px] font-bold text-slate-400 uppercase mt-1">With {outboundShrinkage}% Shrinkage</p>
+              </div>
+            </div>
+
+            {/* Campaign Summary & Capacity Logic Card */}
+            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6">
+              <div className="space-y-1 text-center md:text-left">
+                <h4 className="text-xs font-black uppercase text-neutral-gray tracking-widest font-heading">Recommended Dialer Seats</h4>
+                <p className="text-2xl font-black text-black leading-none mt-2">
+                  {Math.ceil(displayGrossOutboundFte)} Seats <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Dialing Concurrent</span>
+                </p>
+              </div>
+              <div className="bg-slate-50 border border-slate-100 rounded-2xl px-5 py-3 text-[10px] leading-relaxed text-slate-600 max-w-md text-left font-medium">
+                <span className="font-bold text-slate-900">💡 Outbound Calculation Logic:</span> Total leads are combined with planned dial attempts. Engaged calls calculate handling effort, while unengaged dial actions apply standard dialing delay buffers. Factoring in pacing limits, staff shrinkage, and dialer overhead yields active dialing capacity.
+              </div>
+            </div>
+
+            {/* Interactive Visualizer - Connection Rate Sensitivity */}
+            <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm animate-in fade-in zoom-in-95 duration-300">
+              <div className="mb-4">
+                <h4 className="text-[10px] font-black text-slate-900 uppercase tracking-widest font-heading">Connect Rate Sensitivity & FTE Load</h4>
+                <p className="text-[8.5px] text-neutral-gray uppercase tracking-widest mt-1">Staff required as connection rates increase campaign talk effort</p>
+              </div>
+              <div className="h-56 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={outboundConnectChartData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="colorOutboundCurve" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#ef4444" stopOpacity={0.2}/>
+                        <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                    <XAxis dataKey="rate" tick={{ fontSize: 8, fontWeight: 900, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 8, fontWeight: 900, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                    <Tooltip contentStyle={{ fontSize: '10px', borderRadius: '12px' }} />
+                    <Area type="monotone" dataKey="FTE Needed" name="Required FTE" stroke="#ef4444" strokeWidth={2.5} fill="url(#colorOutboundCurve)" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderFTECalculator = () => {
+    // Math helpers for Erlang C
+    const getErlangCProbability = (u: number, m: number): number => {
+      if (u <= 0 || m <= 0 || m <= u) return 1.0;
+      let sum = 0.0;
+      let term = 1.0;
+      sum += term;
+      for (let i = 1; i < m; i++) {
+        term = term * u / i;
+        sum += term;
+      }
+      const lastTerm = term * u / m;
+      const erlangB_inv = sum / lastTerm + 1.0;
+      const erlangB = 1.0 / erlangB_inv;
+      const erlangC = erlangB / (1.0 - (u / m) * (1.0 - erlangB));
+      return Math.max(0.0, Math.min(1.0, erlangC));
+    };
+
+    const calculateSla = (u: number, m: number, aht: number, t: number, pw: number): number => {
+      if (m <= u) return 0;
+      const exponent = - (m - u) * (t / aht);
+      const result = 1.0 - pw * Math.exp(exponent);
+      return Math.max(0, Math.min(1, result));
+    };
+
+    // Calculate standard Workload FTE
+    let workloadPeriodLabel = "Weekly";
+    if (fteVolumeBase === "daily") workloadPeriodLabel = "Daily";
+    if (fteVolumeBase === "monthly") workloadPeriodLabel = "Monthly";
+
+    // Convert everything to weekly workload for FTE calculation
+    let weeklyVolume = fteVolume;
+    if (fteVolumeBase === "daily") {
+      weeklyVolume = fteVolume * fteWorkDays;
+    } else if (fteVolumeBase === "monthly") {
+      weeklyVolume = fteVolume / 4.33;
+    }
+
+    const baseWorkloadHours = (weeklyVolume * fteAht) / 3600;
+    const baseFte = baseWorkloadHours / fteWeekHours;
+    const occupancyFte = baseFte / (fteOccupancy / 100);
+    const grossFte = occupancyFte / (1 - fteShrinkage / 100);
+
+    // Scaling results based on the chosen view/base
+    let displayWorkloadHours = baseWorkloadHours;
+    let displayBaseFte = baseFte;
+    let displayOccupancyFte = occupancyFte;
+    let displayGrossFte = grossFte;
+
+    if (fteVolumeBase === "daily") {
+      displayWorkloadHours = baseWorkloadHours / fteWorkDays;
+      displayBaseFte = baseFte / fteWorkDays;
+      displayOccupancyFte = occupancyFte / fteWorkDays;
+      displayGrossFte = grossFte / fteWorkDays;
+    } else if (fteVolumeBase === "monthly") {
+      displayWorkloadHours = baseWorkloadHours * 4.33;
+      displayBaseFte = baseFte * 4.33;
+      displayOccupancyFte = occupancyFte * 4.33;
+      displayGrossFte = grossFte * 4.33;
+    }
+
+    // Sensitivity charts data for Workload
+    const shrinkageChartData = Array.from({ length: 11 }).map((_, i) => {
+      const shrinkVal = i * 5; // 0% to 50%
+      const grossFteCalc = occupancyFte / (1 - shrinkVal / 100);
+      return {
+        shrinkage: `${shrinkVal}%`,
+        "FTE Needed": parseFloat(grossFteCalc.toFixed(1)),
+        "Net FTE": parseFloat(occupancyFte.toFixed(1))
+      };
+    });
+
+    const occupancyChartData = Array.from({ length: 10 }).map((_, i) => {
+      const occVal = 50 + i * 5; // 50% to 95%
+      const occFteCalc = baseFte / (occVal / 100);
+      const grossFteCalc = occFteCalc / (1 - fteShrinkage / 100);
+      return {
+        occupancy: `${occVal}%`,
+        "FTE Needed": parseFloat(grossFteCalc.toFixed(1)),
+        "Base FTE": parseFloat(baseFte.toFixed(1))
+      };
+    });
+
+    // Erlang C math calculations
+    const erlangU = (erlangArrivals * erlangAht) / 3600; // traffic intensity in Erlangs
+    let erlangMinAgents = erlangU > 0 ? Math.ceil(erlangU) + 1 : 1;
+    let erlangSlaAchieved = 0;
+    let erlangPwValue = 1.0;
+
+    if (erlangU > 0) {
+      while (erlangMinAgents < 1000) {
+        erlangPwValue = getErlangCProbability(erlangU, erlangMinAgents);
+        erlangSlaAchieved = calculateSla(erlangU, erlangMinAgents, erlangAht, erlangTargetSla, erlangPwValue);
+        if (erlangSlaAchieved >= (erlangTargetSlaPct / 100)) {
+          break;
+        }
+        erlangMinAgents++;
+      }
+    } else {
+      erlangMinAgents = 0;
+      erlangSlaAchieved = 1.0;
+      erlangPwValue = 0.0;
+    }
+
+    const erlangOccupancy = erlangMinAgents > 0 ? (erlangU / erlangMinAgents) * 100 : 0;
+    const erlangGrossAgents = erlangMinAgents / (1 - erlangShrinkage / 100);
+    const erlangAverageDelay = erlangMinAgents > erlangU ? (erlangPwValue * erlangAht) / (erlangMinAgents - erlangU) : 0; // Average speed of answer in seconds
+
+    // Erlang Agent curves data
+    const maxAgentScale = Math.max(erlangMinAgents + 15, Math.ceil(erlangU) + 25);
+    const minAgentScale = Math.max(erlangMinAgents > 10 ? erlangMinAgents - 10 : 1, Math.ceil(erlangU) + 1);
+    const erlangAgentCurve = [];
+    if (erlangU > 0) {
+      for (let currentAgents = minAgentScale; currentAgents <= maxAgentScale; currentAgents++) {
+        const pw = getErlangCProbability(erlangU, currentAgents);
+        const sla = calculateSla(erlangU, currentAgents, erlangAht, erlangTargetSla, pw);
+        erlangAgentCurve.push({
+          agents: currentAgents,
+          "SLA Achieved %": parseFloat((sla * 100).toFixed(1)),
+          "Target SLA %": erlangTargetSlaPct,
+          "Queue Probability %": parseFloat((pw * 100).toFixed(1))
+        });
+      }
+    }
+
+    // --- Outbound Dialer/Campaign Math ---
+    let outboundPeriodLabel = "Weekly";
+    if (outboundLeadsBase === "daily") outboundPeriodLabel = "Daily";
+    if (outboundLeadsBase === "monthly") outboundPeriodLabel = "Monthly";
+
+    // Convert leads to weekly for standardized math, or scale accordingly
+    let weeklyLeads = outboundLeads;
+    if (outboundLeadsBase === "daily") {
+      weeklyLeads = outboundLeads * outboundWorkDays;
+    } else if (outboundLeadsBase === "monthly") {
+      weeklyLeads = outboundLeads / 4.33;
+    }
+
+    const totalDialsWeekly = weeklyLeads * outboundAttempts;
+    const connectedCallsWeekly = totalDialsWeekly * (outboundConnectRate / 100);
+    const unconnectedCallsWeekly = totalDialsWeekly * (1 - outboundConnectRate / 100);
+
+    const connectedHoursWeekly = (connectedCallsWeekly * outboundAht) / 3600;
+    // Assume average dial/unconnected attempt duration is 15 seconds
+    const unconnectedHoursWeekly = (unconnectedCallsWeekly * 15) / 3600;
+    const totalOutboundHoursWeekly = connectedHoursWeekly + unconnectedHoursWeekly;
+
+    const baseOutboundFte = totalOutboundHoursWeekly / outboundWeekHours;
+    const occupancyOutboundFte = baseOutboundFte / (outboundOccupancy / 100);
+    const grossOutboundFte = occupancyOutboundFte / (1 - outboundShrinkage / 100);
+
+    // Scaling for display values
+    let displayTotalLeads = outboundLeads;
+    let displayTotalDials = totalDialsWeekly;
+    let displayConnected = connectedCallsWeekly;
+    let displayOutboundHours = totalOutboundHoursWeekly;
+    let displayBaseOutboundFte = baseOutboundFte;
+    let displayOccOutboundFte = occupancyOutboundFte;
+    let displayGrossOutboundFte = grossOutboundFte;
+
+    if (outboundLeadsBase === "daily") {
+      displayTotalDials = totalDialsWeekly / outboundWorkDays;
+      displayConnected = connectedCallsWeekly / outboundWorkDays;
+      displayOutboundHours = totalOutboundHoursWeekly / outboundWorkDays;
+      displayBaseOutboundFte = baseOutboundFte / outboundWorkDays;
+      displayOccOutboundFte = occupancyOutboundFte / outboundWorkDays;
+      displayGrossOutboundFte = grossOutboundFte / outboundWorkDays;
+    } else if (outboundLeadsBase === "monthly") {
+      displayTotalDials = totalDialsWeekly * 4.33;
+      displayConnected = connectedCallsWeekly * 4.33;
+      displayOutboundHours = totalOutboundHoursWeekly * 4.33;
+      displayBaseOutboundFte = baseOutboundFte * 4.33;
+      displayOccOutboundFte = occupancyOutboundFte * 4.33;
+      displayGrossOutboundFte = grossOutboundFte * 4.33;
+    }
+
+    // Connect Rate Sensitivity chart data
+    const outboundConnectChartData = Array.from({ length: 10 }).map((_, i) => {
+      const connRate = 10 + i * 10; // 10% to 100%
+      const dials = weeklyLeads * outboundAttempts;
+      const conn = dials * (connRate / 100);
+      const unconn = dials * (1 - connRate / 100);
+      const hrs = ((conn * outboundAht) + (unconn * 15)) / 3600;
+      const bFte = hrs / outboundWeekHours;
+      const oFte = bFte / (outboundOccupancy / 100);
+      const gFte = oFte / (1 - outboundShrinkage / 100);
+
+      // Scale to current display base
+      let scaleG = gFte;
+      if (outboundLeadsBase === "daily") scaleG = gFte / outboundWorkDays;
+      else if (outboundLeadsBase === "monthly") scaleG = gFte * 4.33;
+
+      return {
+        rate: `${connRate}%`,
+        "FTE Needed": parseFloat(scaleG.toFixed(1)),
+        "Connected": Math.round(conn / (outboundLeadsBase === "daily" ? outboundWorkDays : outboundLeadsBase === "monthly" ? 0.231 : 1))
+      };
+    });
+
+    const handleCopyReport = () => {
+      let reportText = "";
+      if (fteTab === "outbound") {
+        reportText = `--- OUTBOUND CAMPAIGN STAFFING REPORT ---
+Period: ${outboundPeriodLabel} Basis
+Target Leads/Contacts: ${outboundLeads.toLocaleString()}
+Attempts per Lead: ${outboundAttempts}
+Average Handling Time (AHT) of Engaged Calls: ${outboundAht} seconds
+Connect / Answer Rate Target: ${outboundConnectRate}%
+Dial Action Overhead (unengaged): 15 seconds
+Productive Week Hours per FTE: ${outboundWeekHours} hours
+Workdays per Week: ${outboundWorkDays} days
+
+Target Occupancy: ${outboundOccupancy}%
+Shrinkage Rate: ${outboundShrinkage}%
+
+--- CALCULATION RESULTS ---
+Total Dial Attempts: ${Math.round(displayTotalDials).toLocaleString()}
+Connected / Engaged Calls: ${Math.round(displayConnected).toLocaleString()}
+Dialer & Talk Effort: ${displayOutboundHours.toFixed(1)} Hours
+Base FTEs Needed (100% Occupancy): ${displayBaseOutboundFte.toFixed(2)} FTE
+Occupancy-Adjusted FTEs Needed: ${displayOccOutboundFte.toFixed(2)} FTE
+Gross FTEs Needed (With Shrinkage): ${displayGrossOutboundFte.toFixed(2)} FTE
+Recommended Headcount: ${Math.ceil(displayGrossOutboundFte)} Personnel
+`;
+      } else if (fteMode === "workload") {
+        reportText = `--- WORKLOAD-BASED FTE CALCULATION REPORT ---
+Period: ${workloadPeriodLabel} Basis
+Contact Volume: ${fteVolume.toLocaleString()}
+Average Handling Time (AHT): ${fteAht} seconds
+Productive Week Hours per FTE: ${fteWeekHours} hours
+Workdays per Week: ${fteWorkDays} days
+
+Target Occupancy: ${fteOccupancy}%
+Shrinkage Rate: ${fteShrinkage}%
+
+--- CALCULATION RESULTS ---
+Total Workload: ${displayWorkloadHours.toFixed(1)} Hours / ${workloadPeriodLabel.toLowerCase()}
+Base FTEs Needed (100% Occupancy): ${displayBaseFte.toFixed(2)} FTE
+Occupancy-Adjusted FTEs Needed: ${displayOccupancyFte.toFixed(2)} FTE
+Gross FTEs Needed (With Shrinkage): ${displayGrossFte.toFixed(2)} FTE
+Recommended Headcount: ${Math.ceil(displayGrossFte)} Personnel
+`;
+      } else {
+        reportText = `--- ERLANG-C REAL-TIME STAFFING REPORT ---
+Inbound Arrival Rate: ${erlangArrivals} contacts/hour
+Average Handling Time (AHT): ${erlangAht} seconds
+Traffic Intensity (Load): ${erlangU.toFixed(2)} Erlangs
+Target Service Level (SLA): ${erlangTargetSlaPct}% answered within ${erlangTargetSla} seconds
+Staff Shrinkage: ${erlangShrinkage}%
+
+--- STAFF DETERMINATION SUMMARY ---
+Net Staff Required on Phones: ${erlangMinAgents} Agents
+Probability of Call Queuing: ${(erlangPwValue * 100).toFixed(1)}%
+Achieved Service Level: ${(erlangSlaAchieved * 100).toFixed(1)}%
+Agent Occupancy: ${erlangOccupancy.toFixed(1)}%
+Average Speed of Answer (ASA): ${erlangAverageDelay.toFixed(1)} seconds
+Gross Scheduled Agents (With Shrinkage): ${erlangGrossAgents.toFixed(1)} Agents
+Recommended Headcount on Roster: ${Math.ceil(erlangGrossAgents)} Agents
+`;
+      }
+
+      navigator.clipboard.writeText(reportText);
+      showNotification("Report copied to clipboard! 📋", "success");
+    };
+
+    if (fteTab === "outbound") {
+      return renderOutboundCalculator();
+    }
+
+    return (
+      <div className="space-y-6 sm:space-y-8 animate-in fade-in duration-500">
+        
+        {/* Module Header / Mode Switcher */}
+        <div className="bg-white p-6 sm:p-8 rounded-3xl border border-gray-100 shadow-sm flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-6">
+          <div className="space-y-1">
+            <div className="italic inline-flex items-center gap-1.5 bg-neutral-900 text-neutral-100 px-3 py-1 rounded-full text-[8.5px] font-black uppercase tracking-widest">
+              <Calculator size={11} className="text-active-red shrink-0" />
+              Calculations Engine v2.1
+            </div>
+            <h3 className="text-xl sm:text-2xl font-black text-black tracking-tight uppercase">FTE & Capacity Calculator</h3>
+            <p className="text-neutral-gray text-[10px] font-bold uppercase tracking-widest">Perform granular workload modeling & Erlang staffing analysis</p>
+          </div>
+
+          <div className="flex bg-gray-100 p-1 rounded-xl items-center self-start lg:self-center">
+            <button
+              onClick={() => setFteMode("workload")}
+              className={`px-5 py-2 rounded-lg text-[9.5px] font-black uppercase tracking-widest transition-all ${
+                fteMode === "workload" ? "bg-white text-black shadow-sm" : "text-neutral-gray hover:text-black"
+              }`}
+            >
+              Standard Workload FTE
+            </button>
+            <button
+              onClick={() => setFteMode("erlang")}
+              className={`px-5 py-2 rounded-lg text-[9.5px] font-black uppercase tracking-widest transition-all ${
+                fteMode === "erlang" ? "bg-white text-black shadow-sm" : "text-neutral-gray hover:text-black"
+              }`}
+            >
+              Erlang-C Real-time Staff
+            </button>
+          </div>
+        </div>
+
+        {/* Content Layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 items-start">
+          
+          {/* LEFT: Inputs Form (Column 4) */}
+          <div className="lg:col-span-4 bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-6">
+            <div className="border-b border-gray-50 pb-3">
+              <h4 className="text-[12px] font-black text-black uppercase tracking-widest flex items-center gap-2">
+                Modeling Parameters
+              </h4>
+              <p className="text-[9px] text-neutral-gray font-bold uppercase tracking-tight mt-1">Adjust sliders or numerical values below</p>
+            </div>
+
+            {fteMode === "workload" ? (
+              // --- Workload Mode Parameters ---
+              <div className="space-y-5">
+                {/* Volume Base Selection */}
+                <div className="space-y-1.5">
+                  <label className="text-[9px] font-extrabold text-neutral-gray uppercase tracking-widest">Volume Time Base</label>
+                  <div className="grid grid-cols-3 gap-1">
+                    {(["daily", "weekly", "monthly"] as const).map((base) => (
+                      <button
+                        key={base}
+                        onClick={() => setFteVolumeBase(base)}
+                        className={`py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all border ${
+                          fteVolumeBase === base
+                            ? "bg-slate-900 border-slate-900 text-white"
+                            : "bg-white border-gray-200 text-neutral-gray hover:border-black hover:text-black"
+                        }`}
+                      >
+                        {base}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Contact Volume Input / Slider */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center text-[9px] tracking-widest uppercase">
+                    <span className="font-extrabold text-neutral-gray">{workloadPeriodLabel} Volume</span>
+                    <span className="font-black text-black">{fteVolume.toLocaleString()} unit</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="100"
+                    max={fteVolumeBase === "daily" ? 10000 : fteVolumeBase === "monthly" ? 200000 : 100000}
+                    step="100"
+                    value={fteVolume}
+                    onChange={(e) => setFteVolume(Number(e.target.value))}
+                    className="w-full accent-black h-1 bg-gray-100 rounded-lg appearance-none cursor-pointer"
+                  />
+                  <input
+                    type="number"
+                    value={fteVolume}
+                    onChange={(e) => setFteVolume(Math.max(1, Number(e.target.value)))}
+                    className="w-full bg-gray-50 text-[10px] sm:text-[11px] font-mono font-bold uppercase tracking-widest border border-gray-100 rounded-xl px-4 py-2 text-slate-700 focus:outline-none focus:ring-1 focus:ring-black"
+                  />
+                </div>
+
+                {/* AHT Input / Slider */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center text-[9px] tracking-widest uppercase">
+                    <span className="font-extrabold text-neutral-gray">AHT (Seconds)</span>
+                    <span className="font-black text-black">{fteAht}s ({Math.floor(fteAht / 60)}m {fteAht % 60}s)</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="30"
+                    max="1800"
+                    step="5"
+                    value={fteAht}
+                    onChange={(e) => setFteAht(Number(e.target.value))}
+                    className="w-full accent-black h-1 bg-gray-100 rounded-lg appearance-none cursor-pointer"
+                  />
+                  <input
+                    type="number"
+                    value={fteAht}
+                    onChange={(e) => setFteAht(Math.max(1, Number(e.target.value)))}
+                    className="w-full bg-gray-50 text-[10px] sm:text-[11px] font-mono font-bold uppercase tracking-widest border border-gray-100 rounded-xl px-4 py-2 text-slate-700 focus:outline-none focus:ring-1 focus:ring-black"
+                  />
+                </div>
+
+                {/* Occupancy Target */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center text-[9px] tracking-widest uppercase">
+                    <span className="font-extrabold text-neutral-gray">Target Occupancy %</span>
+                    <span className="font-black text-black">{fteOccupancy}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="50"
+                    max="100"
+                    step="1"
+                    value={fteOccupancy}
+                    onChange={(e) => setFteOccupancy(Number(e.target.value))}
+                    className="w-full accent-black h-1 bg-gray-100 rounded-lg appearance-none cursor-pointer"
+                  />
+                  <div className="text-[8px] text-gray-400 font-bold uppercase leading-relaxed">
+                    Percentage of logged-in productive time spent actually handling transactions (Recommended: 80% - 90%).
+                  </div>
+                </div>
+
+                {/* Shrinkage Target */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center text-[9px] tracking-widest uppercase">
+                    <span className="font-extrabold text-neutral-gray">Roster Shrinkage %</span>
+                    <span className="font-black text-black">{fteShrinkage}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="50"
+                    step="1"
+                    value={fteShrinkage}
+                    onChange={(e) => setFteShrinkage(Number(e.target.value))}
+                    className="w-full accent-black h-1 bg-gray-100 rounded-lg appearance-none cursor-pointer"
+                  />
+                  <div className="text-[8px] text-gray-400 font-bold uppercase leading-relaxed">
+                    Covers off-phone non-productive codes (training, sick, breaks, meetings). Default is 23% - 30%.
+                  </div>
+                </div>
+
+                {/* Base FTE Weekly Hours */}
+                <div className="grid grid-cols-2 gap-3 pt-2">
+                  <div className="space-y-1.5">
+                    <label className="text-[8.5px] font-extrabold text-neutral-gray uppercase tracking-widest block">Hours/Week (FTE)</label>
+                    <input
+                      type="number"
+                      min="30"
+                      max="48"
+                      value={fteWeekHours}
+                      onChange={(e) => setFteWeekHours(Math.max(30, Math.min(48, Number(e.target.value))))}
+                      className="w-full bg-gray-50 text-[10px] sm:text-[11px] font-mono font-bold border border-gray-100 rounded-xl px-3 py-2 text-slate-700"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[8.5px] font-extrabold text-neutral-gray uppercase tracking-widest block">Workdays/Week</label>
+                    <input
+                      type="number"
+                      min="4"
+                      max="7"
+                      value={fteWorkDays}
+                      onChange={(e) => setFteWorkDays(Math.max(4, Math.min(7, Number(e.target.value))))}
+                      className="w-full bg-gray-50 text-[10px] sm:text-[11px] font-mono font-bold border border-gray-100 rounded-xl px-3 py-2 text-slate-700"
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              // --- Erlang C Mode Parameters ---
+              <div className="space-y-5">
+                {/* Arrival Rate */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center text-[9px] tracking-widest uppercase">
+                    <span className="font-extrabold text-neutral-gray">Arrivals / Hour</span>
+                    <span className="font-black text-black">{erlangArrivals} calls/hr</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="10"
+                    max="1500"
+                    step="10"
+                    value={erlangArrivals}
+                    onChange={(e) => setErlangArrivals(Number(e.target.value))}
+                    className="w-full accent-black h-1 bg-gray-100 rounded-lg appearance-none cursor-pointer"
+                  />
+                  <input
+                    type="number"
+                    value={erlangArrivals}
+                    onChange={(e) => setErlangArrivals(Math.max(1, Number(e.target.value)))}
+                    className="w-full bg-gray-50 text-[10px] sm:text-[11px] font-mono font-bold uppercase tracking-widest border border-gray-100 rounded-xl px-4 py-2 text-slate-700 focus:outline-none focus:ring-1 focus:ring-black"
+                  />
+                </div>
+
+                {/* AHT Input */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center text-[9px] tracking-widest uppercase">
+                    <span className="font-extrabold text-neutral-gray">AHT (Seconds)</span>
+                    <span className="font-black text-black">{erlangAht}s</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="30"
+                    max="1200"
+                    step="5"
+                    value={erlangAht}
+                    onChange={(e) => setErlangAht(Number(e.target.value))}
+                    className="w-full accent-black h-1 bg-gray-100 rounded-lg appearance-none cursor-pointer"
+                  />
+                  <input
+                    type="number"
+                    value={erlangAht}
+                    onChange={(e) => setErlangAht(Math.max(1, Number(e.target.value)))}
+                    className="w-full bg-gray-50 text-[10px] sm:text-[11px] font-mono font-bold uppercase tracking-widest border border-gray-100 rounded-xl px-4 py-2 text-slate-700 focus:outline-none focus:ring-1 focus:ring-black"
+                  />
+                </div>
+
+                {/* Target SLA Target Seconds */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center text-[9px] tracking-widest uppercase">
+                    <span className="font-extrabold text-neutral-gray">SLA Target Time (Wait)</span>
+                    <span className="font-black text-black">{erlangTargetSla}s</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="5"
+                    max="180"
+                    step="5"
+                    value={erlangTargetSla}
+                    onChange={(e) => setErlangTargetSla(Number(e.target.value))}
+                    className="w-full accent-black h-1 bg-gray-100 rounded-lg appearance-none cursor-pointer"
+                  />
+                </div>
+
+                {/* Target SLA Pct */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center text-[9px] tracking-widest uppercase">
+                    <span className="font-extrabold text-neutral-gray">Service Level % Target</span>
+                    <span className="font-black text-black">{erlangTargetSlaPct}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="10"
+                    max="100"
+                    step="5"
+                    value={erlangTargetSlaPct}
+                    onChange={(e) => setErlangTargetSlaPct(Number(e.target.value))}
+                    className="w-full accent-black h-1 bg-gray-100 rounded-lg appearance-none cursor-pointer"
+                  />
+                  <div className="text-[8px] text-gray-400 font-bold uppercase leading-relaxed">
+                    E.g. Target 80% of calls answered within {erlangTargetSla} seconds.
+                  </div>
+                </div>
+
+                {/* Erlang Shrinkage */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center text-[9px] tracking-widest uppercase">
+                    <span className="font-extrabold text-neutral-gray">Erlang Shrinkage %</span>
+                    <span className="font-black text-black">{erlangShrinkage}%</span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0"
+                    max="50"
+                    step="1"
+                    value={erlangShrinkage}
+                    onChange={(e) => setErlangShrinkage(Number(e.target.value))}
+                    className="w-full accent-black h-1 bg-gray-100 rounded-lg appearance-none cursor-pointer"
+                  />
+                </div>
+              </div>
+            )}
+
+            <button
+              onClick={handleCopyReport}
+              className="w-full mt-6 py-3 bg-black hover:bg-neutral-800 text-white text-[10px] font-black uppercase tracking-widest rounded-xl transition-all shadow-md flex items-center justify-center gap-2"
+            >
+              <Download size={13} /> Export Calculations
+            </button>
+          </div>
+
+          {/* RIGHT: Results Display (Column 8) */}
+          <div className="lg:col-span-8 space-y-6 sm:space-y-8">
+            
+            {/* Grid display depending on Mode */}
+            {fteMode === "workload" ? (
+              // --- Workload Mode Results Grid ---
+              <div className="space-y-6">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm relative group hover:border-black transition-all">
+                    <p className="text-[8px] sm:text-[9.5px] font-bold text-neutral-gray uppercase tracking-widest mb-1">Workload Hours</p>
+                    <p className="text-xl sm:text-2xl font-black text-black tracking-tight">{displayWorkloadHours.toFixed(1)} hrs</p>
+                    <p className="text-[8px] font-semibold text-neutral-gray uppercase mt-1">Per {workloadPeriodLabel.toLowerCase()}</p>
+                  </div>
+                  <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm relative group hover:border-black transition-all">
+                    <p className="text-[8px] sm:text-[9.5px] font-bold text-neutral-gray uppercase tracking-widest mb-1">Base FTE</p>
+                    <p className="text-xl sm:text-2xl font-black text-slate-800 tracking-tight">{displayBaseFte.toFixed(2)}</p>
+                    <p className="text-[8px] font-semibold text-neutral-gray uppercase mt-1">At 100% Occupancy</p>
+                  </div>
+                  <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm relative group hover:border-black transition-all">
+                    <p className="text-[8px] sm:text-[9.5px] font-bold bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded-md inline-block uppercase tracking-widest mb-1">Occ Adjusted</p>
+                    <p className="text-xl sm:text-2xl font-black text-indigo-700 tracking-tight">{displayOccupancyFte.toFixed(2)}</p>
+                    <p className="text-[8px] font-semibold text-neutral-gray uppercase mt-1">At {fteOccupancy}% Occupancy</p>
+                  </div>
+                  <div className="bg-slate-950 p-5 rounded-3xl shadow-lg relative group border border-slate-900 transition-all text-white">
+                    <p className="text-[8px] sm:text-[9.5px] font-bold text-rose-500 uppercase tracking-widest mb-1">Required FTE</p>
+                    <p className="text-xl sm:text-2xl font-black text-white tracking-tight">{displayGrossFte.toFixed(2)}</p>
+                    <p className="text-[8px] font-bold text-slate-400 uppercase mt-1">With {fteShrinkage}% Shrinkage</p>
+                  </div>
+                </div>
+
+                <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm flex flex-col md:flex-row items-center justify-between gap-6">
+                  <div className="space-y-1 text-center md:text-left">
+                    <h4 className="text-xs font-black uppercase text-neutral-gray tracking-widest">Recommended Resource Count</h4>
+                    <p className="text-2xl font-black text-black leading-none mt-2">{Math.ceil(displayGrossFte)} Personnel <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">On contract</span></p>
+                  </div>
+                  <div className="bg-slate-50 border border-slate-100 rounded-2xl px-5 py-3 text-[10px] leading-relaxed text-slate-600 max-w-md text-left font-medium">
+                    <span className="font-bold text-slate-900">💡 Calculation Logic:</span> Raw hours are calculated by taking transactions × handling time. Net FTE assumes absolute efficiency. Adding adjusted occupancy buffers for administrative idle periods, then compounding for roster shrinkage yields final staff totals.
+                  </div>
+                </div>
+
+                {/* Interactive Visualizers side-by-side */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Shrinkage Curve */}
+                  <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+                    <div className="mb-4">
+                      <h4 className="text-[10px] font-black text-slate-900 uppercase tracking-widest">Shrinkage Staffing Overhead</h4>
+                      <p className="text-[8.5px] text-neutral-gray uppercase tracking-widest mt-1">Staff required as offline time increases</p>
+                    </div>
+                    <div className="h-44 w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={shrinkageChartData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                          <defs>
+                            <linearGradient id="colorShrinkCurve" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#10b981" stopOpacity={0.2}/>
+                              <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                          <XAxis dataKey="shrinkage" tick={{ fontSize: 8, fontWeight: 900, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                          <YAxis tick={{ fontSize: 8, fontWeight: 900, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                          <Tooltip contentStyle={{ fontSize: '10px', borderRadius: '12px' }} />
+                          <Area type="monotone" dataKey="FTE Needed" name="Gross FTE" stroke="#10b981" strokeWidth={2.5} fill="url(#colorShrinkCurve)" />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  {/* Occupancy Curve */}
+                  <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+                    <div className="mb-4">
+                      <h4 className="text-[10px] font-black text-slate-900 uppercase tracking-widest">Occupancy Sensitivity</h4>
+                      <p className="text-[8.5px] text-neutral-gray uppercase tracking-widest mt-1">Staff required compared to target efficiency</p>
+                    </div>
+                    <div className="h-44 w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={occupancyChartData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                          <defs>
+                            <linearGradient id="colorOccCurve" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#6366f1" stopOpacity={0.2}/>
+                              <stop offset="95%" stopColor="#6366f1" stopOpacity={0}/>
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                          <XAxis dataKey="occupancy" tick={{ fontSize: 8, fontWeight: 900, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                          <YAxis tick={{ fontSize: 8, fontWeight: 900, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                          <Tooltip contentStyle={{ fontSize: '10px', borderRadius: '12px' }} />
+                          <Area type="monotone" dataKey="FTE Needed" name="Gross FTE" stroke="#6366f1" strokeWidth={2.5} fill="url(#colorOccCurve)" />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              // --- Erlang C Mode Results Grid ---
+              <div className="space-y-6">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm relative group hover:border-black transition-all">
+                    <p className="text-[8.5px] font-bold text-neutral-gray uppercase tracking-widest mb-1">Traffic Load (Erlangs)</p>
+                    <p className="text-xl sm:text-2xl font-black text-black tracking-tight">{erlangU.toFixed(2)} erl</p>
+                    <p className="text-[8px] font-semibold text-neutral-gray uppercase mt-1">Concurrent hour-workloads</p>
+                  </div>
+                  <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm relative group hover:border-black transition-all">
+                    <p className="text-[8.5px] font-bold text-neutral-gray uppercase tracking-widest mb-1">Required Net Staff</p>
+                    <p className="text-xl sm:text-2xl font-black text-indigo-600 tracking-tight">{erlangMinAgents} Agents</p>
+                    <p className="text-[8px] font-semibold text-neutral-gray uppercase mt-1">To achieve SLA target</p>
+                  </div>
+                  <div className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm relative group hover:border-black transition-all">
+                    <p className="text-[8.5px] font-bold bg-green-50 text-green-700 px-1.5 py-0.5 rounded-md inline-block uppercase tracking-widest mb-1">Achieved SLA %</p>
+                    <p className="text-xl sm:text-2xl font-black text-green-700 tracking-tight">{(erlangSlaAchieved * 100).toFixed(1)}%</p>
+                    <p className="text-[8px] font-semibold text-neutral-gray uppercase mt-1">Answered in {erlangTargetSla}s</p>
+                  </div>
+                  <div className="bg-slate-950 p-5 rounded-3xl shadow-lg relative group border border-slate-900 transition-all text-white">
+                    <p className="text-[8.5px] font-bold text-rose-500 uppercase tracking-widest mb-1">Gross Roster Staff</p>
+                    <p className="text-xl sm:text-2xl font-black text-white tracking-tight">{erlangGrossAgents.toFixed(1)}</p>
+                    <p className="text-[8px] font-bold text-slate-400 uppercase mt-1">With {erlangShrinkage}% Shrinkage</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-slate-50 border border-slate-100 p-4.5 rounded-2xl">
+                    <span className="text-[8.5px] font-black uppercase text-slate-400 tracking-widest">Calculated Queue Delay (ASA)</span>
+                    <p className="text-xl font-black text-slate-900 mt-1">{erlangAverageDelay.toFixed(1)} seconds</p>
+                    <p className="text-[8px] text-slate-400 mt-0.5">Average Speed of Answer predicted for callers entering queue.</p>
+                  </div>
+                  <div className="bg-slate-50 border border-slate-100 p-4.5 rounded-2xl">
+                    <span className="text-[8.5px] font-black uppercase text-slate-400 tracking-widest">Estimated Agent Occupancy</span>
+                    <p className="text-xl font-black text-slate-900 mt-1">{erlangOccupancy.toFixed(1)}%</p>
+                    <p className="text-[8px] text-slate-400 mt-0.5">Time agents spend handling calls instead of awaiting new contacts.</p>
+                  </div>
+                </div>
+
+                {/* Interactive Erlang SLA vs Staff curve visualizer */}
+                <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm">
+                  <div className="mb-4">
+                    <h4 className="text-[10px] font-black text-slate-900 uppercase tracking-widest">Erlang Service Level Capacity Curve</h4>
+                    <p className="text-[8.5px] text-neutral-gray uppercase tracking-widest mt-1">Service Level response compared to active agent count</p>
+                  </div>
+                  <div className="h-56 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ComposedChart data={erlangAgentCurve} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="colorQueueCurve" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#ef4444" stopOpacity={0.2}/>
+                            <stop offset="95%" stopColor="#ef4444" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                        <XAxis dataKey="agents" tick={{ fontSize: 8, fontWeight: 900, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                        <YAxis tick={{ fontSize: 8, fontWeight: 900, fill: '#64748b' }} axisLine={false} tickLine={false} />
+                        <Tooltip contentStyle={{ fontSize: '10px', borderRadius: '12px' }} />
+                        <ReferenceLine y={erlangTargetSlaPct} stroke="#6366f1" strokeDasharray="5 5" label={{ value: 'Target', position: 'top', fill: '#6366f1', fontSize: '8px', fontWeight: 'bold' }} />
+                        <Area type="monotone" dataKey="Queue Probability %" name="Queue Prob %" stroke="#ef4444" strokeWidth={1.5} fill="url(#colorQueueCurve)" />
+                        <Line type="monotone" dataKey="SLA Achieved %" name="SLA %" stroke="#10b981" strokeWidth={3.5} dot={{ r: 4 }} activeDot={{ r: 6 }} />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="p-3 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center gap-2.5 text-[8.5px] text-indigo-900 mt-4 leading-relaxed font-semibold">
+                    <HelpCircle size={14} className="text-indigo-600 shrink-0" />
+                    <span>
+                      <span className="font-bold">Interpretation:</span> Adding agents beyond {erlangMinAgents} quickly approaches 100% SLA, while dropping below {Math.ceil(erlangU) + 1} agents forces indefinite queueing wait times and critically low service availability levels due to a traffic load exceeding staff capability.
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderDB = () => {
     const filteredDbEmployees = dbEmployees
       .filter(emp => matchSite(emp.site, selectedSite))
@@ -6293,7 +7978,25 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
       <div className="px-1">
         <div className="flex flex-col p-3 bg-white border border-gray-100 rounded-2xl shadow-sm">
           {/* Header Filters - All Parallel */}
-          <div className="flex flex-wrap items-center gap-x-6 gap-y-3 px-2 pb-3 border-b border-gray-50">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-3 px-2">
+            <button
+              onClick={() => setIsNavVisible(!isNavVisible)}
+              className="flex items-center gap-2 px-3.5 h-8 sm:h-9 rounded-xl border border-gray-100 bg-gray-50 text-[10px] font-black uppercase tracking-widest hover:bg-black hover:text-white transition-all outline-none"
+              title={isNavVisible ? "Hide Nav" : "Show Nav"}
+            >
+              {isNavVisible ? (
+                <>
+                  <PanelLeftClose className="w-3.5 h-3.5" />
+                  <span>Hide Nav</span>
+                </>
+              ) : (
+                <>
+                  <PanelLeftOpen className="w-3.5 h-3.5 text-active-red" />
+                  <span className="text-active-red">Show Nav</span>
+                </>
+              )}
+            </button>
+
             <div className="flex items-center gap-3">
               <span className="text-[10px] font-black text-neutral-gray uppercase tracking-widest whitespace-nowrap">Site:</span>
               <select 
@@ -6334,47 +8037,171 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
               <p className="text-[9px] font-black text-neutral-gray uppercase tracking-[0.2em] opacity-30">Global Workforce Analysis</p>
             </div>
           </div>
-
-          {/* Navigation Tabs - Below Filters */}
-          <nav className="flex items-center overflow-x-auto scrollbar-hide no-scrollbar pt-2 px-1">
-            <div className="flex items-center gap-1.5 min-w-max">
-              {[
-                { id: "schedule", label: "Interval", icon: Clock },
-                { id: "calendar", label: "Calendar", icon: CalendarIcon },
-                { id: "forecasting", label: "Forecast", icon: TrendingUp },
-                { id: "planning", label: "Planning", icon: CalendarIcon },
-                { id: "historical", label: "Historical", icon: History },
-                { id: "db", label: "DB", icon: Database },
-              ].map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id as any)}
-                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${
-                    activeTab === tab.id 
-                      ? "bg-black text-white shadow-lg shadow-black/20" 
-                      : "text-neutral-gray hover:bg-gray-50"
-                  }`}
-                >
-                  <tab.icon className={`w-3 h-3 ${activeTab === tab.id ? "text-active-red" : "text-neutral-gray"}`} />
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-          </nav>
         </div>
       </div>
 
-      <AnimatePresence mode="wait">
-        <motion.div
-           key={activeTab}
-           initial={{ opacity: 0, scale: 0.99, y: 10 }}
-           animate={{ opacity: 1, scale: 1, y: 0 }}
-           exit={{ opacity: 0, scale: 0.99, y: -10 }}
-           transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-        >
+      {/* Main Responsive Grid Layout (Left Navigation Sidebar, Right Tab Content) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start px-1 mt-1">
+        
+        {/* SIDE BAR / LEFT NAV */}
+        {isNavVisible && (
+          <div className="col-span-1 lg:col-span-3 xl:col-span-2.5 bg-white border border-gray-100 rounded-2xl p-4 shadow-sm flex flex-col gap-2 self-start animate-in fade-in slide-in-from-left duration-200">
+            <p className="text-[9.5px] font-black uppercase text-neutral-gray tracking-widest mb-1.5 px-2 hidden lg:block">Navigation</p>
+            
+            <nav className="flex lg:flex-col items-center lg:items-stretch overflow-x-auto lg:overflow-x-visible no-scrollbar pb-1.5 lg:pb-0 gap-1.5 min-w-max lg:min-w-0">
+              {[
+                {
+                  groupTitle: "Schedule",
+                  items: [
+                    { id: "schedule", label: "Interval", icon: Clock },
+                    { id: "calendar", label: "Calendar", icon: CalendarIcon },
+                  ]
+                },
+                {
+                  groupTitle: "Forecast",
+                  items: [
+                    { id: "fte", label: "FTE Calculator", icon: Calculator },
+                    { id: "forecasting", label: "Forecast", icon: TrendingUp },
+                    { id: "planning", label: "Planning", icon: CalendarIcon },
+                  ]
+                },
+                {
+                  groupTitle: "Attendance",
+                  items: [
+                    { id: "adherence", label: "Adherence", icon: UserCheck },
+                    { id: "attendance", label: "Time Management", icon: ClipboardCheck },
+                  ]
+                },
+                {
+                  groupTitle: "History & Data",
+                  items: [
+                    { id: "historical", label: "Historical", icon: History },
+                    { id: "db", label: "Employee", icon: Database },
+                  ]
+                },
+                {
+                  groupTitle: "Configuration",
+                  items: [
+                    { id: "settings", label: "Settings", icon: SettingsIcon },
+                  ]
+                }
+              ].flatMap((g, gIdx) => {
+                const dividerDesktop = (
+                  <div key={`div-desk-${gIdx}`} className="hidden lg:flex items-center gap-2 mt-4 first:mt-0 mb-1 px-1.5 w-full shrink-0 select-none">
+                    <span className="text-[8px] font-black text-rose-500 uppercase tracking-[0.2em] shrink-0">{g.groupTitle}</span>
+                    <div className="flex-1 h-px bg-gray-100" />
+                  </div>
+                );
+
+                const dividerMobile = gIdx > 0 ? (
+                  <div key={`div-mob-${gIdx}`} className="flex lg:hidden items-center gap-1.5 px-1.5 shrink-0 select-none">
+                    <div className="w-px h-5 bg-gray-250" />
+                    <span className="text-[7.5px] font-black text-rose-500 uppercase tracking-widest">{g.groupTitle}</span>
+                  </div>
+                ) : null;
+
+                const tabElements = g.items.map(tab => {
+                  if (tab.id === "fte") {
+                    return (
+                      <div key={tab.id} className="flex flex-row lg:flex-col gap-1 w-full lg:w-full shrink-0">
+                        <button
+                          onClick={() => {
+                            setActiveTab("fte" as any);
+                            setIsFteDropdownOpen(!isFteDropdownOpen);
+                          }}
+                          className={`flex items-center justify-between gap-2 px-4 h-10 lg:h-11 rounded-xl text-[9.5px] lg:text-[10px] font-black uppercase tracking-widest transition-all text-left w-full ${
+                            activeTab === "fte" 
+                              ? "bg-slate-950/[0.03] border border-slate-950/[0.06] text-slate-950 shadow-none" 
+                              : "text-neutral-gray border border-transparent hover:bg-slate-950/[0.02] hover:text-black"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <tab.icon className={`w-3.5 h-3.5 shrink-0 ${activeTab === "fte" ? "text-active-red" : "text-neutral-gray"}`} />
+                            <span>{tab.label}</span>
+                          </div>
+                          <ChevronDown className={`w-3 h-3 shrink-0 ml-1 transition-transform duration-200 ${isFteDropdownOpen ? "rotate-180" : ""}`} />
+                        </button>
+
+                        {isFteDropdownOpen && (
+                          <div className="flex flex-row lg:flex-col gap-1 lg:pl-3 animate-in fade-in slide-in-from-top-1 duration-200">
+                            <button
+                              onClick={() => {
+                                setActiveTab("fte" as any);
+                                setFteTab("inbound");
+                              }}
+                              className={`flex items-center gap-2 px-3 h-8 lg:h-9 rounded-lg text-[8px] lg:text-[9.5px] font-black uppercase tracking-widest text-left transition-all min-w-max ${
+                                activeTab === "fte" && fteTab === "inbound"
+                                  ? "bg-slate-950/[0.03] border border-slate-950/[0.06] text-slate-950 shadow-none"
+                                  : "text-neutral-gray border border-transparent hover:bg-slate-950/[0.02] hover:text-black"
+                              }`}
+                            >
+                              <PhoneIncoming className={`w-3.5 h-3.5 shrink-0 ${activeTab === "fte" && fteTab === "inbound" ? "text-emerald-500" : "text-neutral-gray"}`} />
+                              <span>Inbound</span>
+                            </button>
+                            <button
+                              onClick={() => {
+                                setActiveTab("fte" as any);
+                                setFteTab("outbound");
+                              }}
+                              className={`flex items-center gap-2 px-3 h-8 lg:h-9 rounded-lg text-[8px] lg:text-[9.5px] font-black uppercase tracking-widest text-left transition-all min-w-max ${
+                                activeTab === "fte" && fteTab === "outbound"
+                                  ? "bg-slate-950/[0.03] border border-slate-950/[0.06] text-slate-950 shadow-none"
+                                  : "text-neutral-gray border border-transparent hover:bg-slate-950/[0.02] hover:text-black"
+                              }`}
+                            >
+                              <PhoneOutgoing className={`w-3.5 h-3.5 shrink-0 ${activeTab === "fte" && fteTab === "outbound" ? "text-blue-500" : "text-neutral-gray"}`} />
+                              <span>Outbound</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
+
+
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => {
+                        setActiveTab(tab.id as any);
+                        setIsFteDropdownOpen(false);
+                      }}
+                      className={`flex items-center gap-2.5 px-4 h-10 lg:h-11 rounded-xl text-[9.5px] lg:text-[10px] font-black uppercase tracking-widest transition-all text-center lg:text-left min-w-max lg:min-w-0 w-full shrink-0 ${
+                        activeTab === tab.id 
+                          ? "bg-slate-950/[0.03] border border-slate-950/[0.06] text-slate-950 shadow-none" 
+                          : "text-neutral-gray border border-transparent hover:bg-slate-950/[0.02] hover:text-black"
+                      }`}
+                    >
+                      <tab.icon className={`w-3.5 h-3.5 shrink-0 ${activeTab === tab.id ? "text-active-red" : "text-neutral-gray"}`} />
+                      <span>{tab.label}</span>
+                    </button>
+                  );
+                });
+
+                const result = [];
+                if (dividerDesktop) result.push(dividerDesktop);
+                if (dividerMobile) result.push(dividerMobile);
+                result.push(...tabElements);
+                return result;
+              })}
+            </nav>
+          </div>
+        )}
+
+        {/* RIGHT CONTENT PANEL */}
+        <div className={`col-span-1 ${isNavVisible ? "lg:col-span-9 xl:col-span-9.5" : "lg:col-span-12"} w-full min-w-0 transition-all duration-200`}>
+          <AnimatePresence mode="wait">
+            <motion.div
+               key={activeTab}
+               initial={{ opacity: 0, scale: 0.99, y: 10 }}
+               animate={{ opacity: 1, scale: 1, y: 0 }}
+               exit={{ opacity: 0, scale: 0.99, y: -10 }}
+               transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+            >
           {activeTab === "schedule" && renderScheduleGrid()}
           {activeTab === "calendar" && renderCalendar()}
-          {false && (
+          {activeTab === "adherence" && (
             <div className="space-y-6">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                  <div>
@@ -6513,9 +8340,12 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
               </div>
             </div>
           )}
+          {activeTab === "attendance" && renderAttendance()}
           {activeTab === "forecasting" && renderForecasting()}
           {activeTab === "historical" && renderHistorical()}
+          {activeTab === "fte" && renderFTECalculator()}
           {activeTab === "db" && renderDB()}
+          {activeTab === "settings" && <SettingsPanel initialModule="workforce" hideModuleSwitcher={true} />}
           {activeTab === "planning" && (
             <div className="py-20 sm:py-40 bg-white rounded-2xl sm:rounded-[40px] border border-gray-100 text-center border-dashed px-6">
                <div className="w-12 h-12 sm:w-16 sm:h-16 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -6526,8 +8356,10 @@ export default function WorkforceModule({ onBack }: WorkforceModuleProps) {
                </p>
             </div>
           )}
-        </motion.div>
-      </AnimatePresence>
+            </motion.div>
+          </AnimatePresence>
+        </div>
+      </div>
 
       {/* Context Menu Popup for Calendar */}
       {calendarContextMenu && (
